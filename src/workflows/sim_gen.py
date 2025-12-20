@@ -4,7 +4,7 @@ from mcp_tools.route import random_trips, duarouter
 from mcp_tools.simulation import run_simple_simulation
 from mcp_tools.analysis import analyze_fcd
 
-def sim_gen_workflow(output_dir: str, grid_number: int = 3, steps: int = 100):
+def sim_gen_workflow(output_dir: str, grid_number: int = 3, steps: int = 100) -> str:
     """
     Executes the Simulation Generation & Evaluation workflow:
     1. Generate Grid Network

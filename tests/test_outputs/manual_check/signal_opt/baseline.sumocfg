@@ -1,0 +1,14 @@
+<configuration>
+    <input>
+        <net-file value="F:\sumo-mcp\tests\test_outputs\manual_check\grid.net.xml"/>
+        <route-files value="F:\sumo-mcp\tests\test_outputs\manual_check\routes.xml"/>
+        
+    </input>
+    <time>
+        <begin value="0"/>
+        <end value="100"/>
+    </time>
+    <output>
+        <fcd-output value="F:\sumo-mcp\tests\test_outputs\manual_check\signal_opt\baseline_fcd.xml"/>
+    </output>
+</configuration>

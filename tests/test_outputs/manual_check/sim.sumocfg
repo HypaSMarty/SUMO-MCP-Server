@@ -1,0 +1,13 @@
+<configuration>
+    <input>
+        <net-file value="grid.net.xml"/>
+        <route-files value="routes.xml"/>
+    </input>
+    <time>
+        <begin value="0"/>
+        <end value="50"/>
+    </time>
+    <output>
+        <fcd-output value="fcd.xml"/>
+    </output>
+</configuration>
