@@ -4,16 +4,22 @@ import os
 import sys
 from typing import Optional, List
 
+from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+
 def random_trips(net_file: str, output_file: str, end_time: int = 3600, period: float = 1.0, options: Optional[List[str]] = None) -> str:
     """
     Wrapper for randomTrips.py. Generates random trips for a given network.
     """
-    if 'SUMO_HOME' not in os.environ:
-        return "Error: SUMO_HOME not set"
-    
-    script = os.path.join(os.environ['SUMO_HOME'], 'tools', 'randomTrips.py')
-    if not os.path.exists(script):
-        return f"Error: randomTrips.py not found at {script}"
+    script = find_sumo_tool_script("randomTrips.py")
+    if not script:
+        return "\n".join(
+            [
+                "Error: Could not locate SUMO tool script `randomTrips.py`.",
+                build_sumo_diagnostics("sumo"),
+                "Please set `SUMO_HOME` to your SUMO installation directory "
+                "(so that `$SUMO_HOME/tools/randomTrips.py` exists).",
+            ]
+        )
         
     # Using sys.executable ensures we use the same python environment
     cmd = [sys.executable, script, "-n", net_file, "-o", output_file, "-e", str(end_time), "-p", str(period)]

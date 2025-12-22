@@ -160,3 +160,25 @@ def find_sumo_tool_script(script_name: str) -> Optional[str]:
         return str(script)
 
     return None
+
+
+def build_sumo_diagnostics(binary_name: str = "sumo") -> str:
+    """
+    Build a short, multi-line diagnostic string about SUMO discovery.
+
+    This is intended for inclusion in user-facing error messages.
+    """
+    env_home = os.environ.get("SUMO_HOME") or "Not Set"
+    which_bin = shutil.which(binary_name) or "Not Found"
+    detected_home = find_sumo_home() or "Not Found"
+    tools_dir = find_sumo_tools_dir() or "Not Found"
+
+    return "\n".join(
+        [
+            "Diagnostics:",
+            f"  - SUMO_HOME env: {env_home}",
+            f"  - which({binary_name}): {which_bin}",
+            f"  - find_sumo_home(): {detected_home}",
+            f"  - find_sumo_tools_dir(): {tools_dir}",
+        ]
+    )

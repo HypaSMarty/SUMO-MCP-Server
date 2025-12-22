@@ -4,6 +4,8 @@ import os
 import sys
 from typing import Optional, List
 
+from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+
 def netconvert(osm_file: str, output_file: str, options: Optional[List[str]] = None) -> str:
     """
     Wrapper for SUMO netconvert. Converts OSM files to SUMO network files.
@@ -58,15 +60,18 @@ def osm_get(bbox: str, output_dir: str, prefix: str = "osm", options: Optional[L
         output_dir: Directory to save the data.
         prefix: Prefix for output files.
     """
-    if 'SUMO_HOME' not in os.environ:
-        return "Error: SUMO_HOME not set"
-    
-    script = os.path.join(os.environ['SUMO_HOME'], 'tools', 'osmGet.py')
-    if not os.path.exists(script):
-        return f"Error: osmGet.py not found at {script}"
+    script = find_sumo_tool_script("osmGet.py")
+    if not script:
+        return "\n".join(
+            [
+                "Error: Could not locate SUMO tool script `osmGet.py`.",
+                build_sumo_diagnostics("sumo"),
+                "Please set `SUMO_HOME` to your SUMO installation directory "
+                "(so that `$SUMO_HOME/tools/osmGet.py` exists).",
+            ]
+        )
         
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    os.makedirs(output_dir, exist_ok=True)
         
     # osmGet.py writes to current dir or specified prefix. 
     # We should run it in the output_dir or handle paths carefully.

@@ -1,18 +1,23 @@
 import subprocess
-import os
 import sys
 from typing import Optional, List
+
+from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
 
 def tls_cycle_adaptation(net_file: str, route_files: str, output_file: str) -> str:
     """
     Wrapper for tlsCycleAdaptation.py. Adapts traffic light cycles based on traffic demand.
     """
-    if 'SUMO_HOME' not in os.environ:
-        return "Error: SUMO_HOME not set"
-    
-    script = os.path.join(os.environ['SUMO_HOME'], 'tools', 'tlsCycleAdaptation.py')
-    if not os.path.exists(script):
-        return f"Error: script not found at {script}"
+    script = find_sumo_tool_script("tlsCycleAdaptation.py")
+    if not script:
+        return "\n".join(
+            [
+                "Error: Could not locate SUMO tool script `tlsCycleAdaptation.py`.",
+                build_sumo_diagnostics("sumo"),
+                "Please set `SUMO_HOME` to your SUMO installation directory "
+                "(so that `$SUMO_HOME/tools/tlsCycleAdaptation.py` exists).",
+            ]
+        )
         
     cmd = [sys.executable, script, "-n", net_file, "-r", route_files, "-o", output_file]
     
@@ -33,12 +38,16 @@ def tls_coordinator(net_file: str, route_files: str, output_file: str, options: 
         route_files: Path to route file(s).
         output_file: Path to output network file with coordinated signals.
     """
-    if 'SUMO_HOME' not in os.environ:
-        return "Error: SUMO_HOME not set"
-    
-    script = os.path.join(os.environ['SUMO_HOME'], 'tools', 'tlsCoordinator.py')
-    if not os.path.exists(script):
-        return f"Error: script not found at {script}"
+    script = find_sumo_tool_script("tlsCoordinator.py")
+    if not script:
+        return "\n".join(
+            [
+                "Error: Could not locate SUMO tool script `tlsCoordinator.py`.",
+                build_sumo_diagnostics("sumo"),
+                "Please set `SUMO_HOME` to your SUMO installation directory "
+                "(so that `$SUMO_HOME/tools/tlsCoordinator.py` exists).",
+            ]
+        )
         
     cmd = [sys.executable, script, "-n", net_file, "-r", route_files, "-o", output_file]
     

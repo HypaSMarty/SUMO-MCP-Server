@@ -1,7 +1,7 @@
 import os
 import traci
 
-from utils.sumo import find_sumo_binary
+from utils.sumo import build_sumo_diagnostics, find_sumo_binary
 
 def run_simple_simulation(config_path: str, steps: int = 100) -> str:
     """
@@ -19,9 +19,12 @@ def run_simple_simulation(config_path: str, steps: int = 100) -> str:
 
     sumo_binary = find_sumo_binary("sumo")
     if not sumo_binary:
-        return (
-            "Error finding sumo binary. "
-            "Please ensure SUMO is installed and either `sumo` is available in PATH or `SUMO_HOME` is set."
+        return "\n".join(
+            [
+                "Error: Could not locate SUMO executable (`sumo`).",
+                build_sumo_diagnostics("sumo"),
+                "Please ensure SUMO is installed and either `sumo` is available in PATH or `SUMO_HOME` is set.",
+            ]
         )
     
     # Start simulation
