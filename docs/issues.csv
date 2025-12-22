@@ -79,7 +79,7 @@ P1-1,修复 Windows 跨驱动器路径导致配置不可移植,"**文件位置�
 2. 验证不会重复复制文件（已存在且内容相同则跳过）
 3. 检查 `_as_cfg_path()` 的 warning 消息清晰
 4. 考虑大文件复制的性能影响（必要时添加进度提示）
-5. 更新 `signal_opt_workflow` 的 docstring 说明文件会被复制",未开始,等待确认
+5. 更新 `signal_opt_workflow` 的 docstring 说明文件会被复制",已完成,已完成
 P1-2,重构 find_sumo_binary 返回值为 Optional 类型,"**文件位置：**
 - `src/utils/sumo.py:9-29`（`find_sumo_binary` 函数定义）
 - `src/mcp_tools/simulation.py:20-25`（调用处 1）
