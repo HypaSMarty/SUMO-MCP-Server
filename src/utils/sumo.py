@@ -25,7 +25,8 @@ def find_sumo_binary(name: str) -> Optional[str]:
     resolved: Optional[str] = None
     try:
         candidate = sumolib.checkBinary(name)
-    except Exception:
+    except (SystemExit, OSError, FileNotFoundError, ImportError) as exc:
+        logger.debug("sumolib.checkBinary failed for %s: %s", name, exc)
         candidate = None
 
     if candidate and candidate != name:

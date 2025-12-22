@@ -143,7 +143,7 @@ P2-1,细化异常捕获范围避免隐藏错误,"**文件位置：** `src/utils/
 5. 执行 `pytest tests/ -v` 确保所有测试通过","1. 确认 logging.debug 不会在生产环境打印到 stdout（避免污染 MCP 输出）
 2. 验证异常类型列表完整（检查 sumolib 源码或实际测试）
 3. 考虑是否需要 `except ImportError`（sumolib 未安装场景）
-4. 确保不改变函数行为（仅改进错误处理）",未开始,等待确认
+4. 确保不改变函数行为（仅改进错误处理）",已完成,已完成
 P2-2,改进错误消息增加诊断信息,"**文件位置：**
 - `src/mcp_tools/simulation.py:21-25`
 - `src/mcp_tools/route.py:14-19`
