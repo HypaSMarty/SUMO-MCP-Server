@@ -1,8 +1,22 @@
 import os
-import sys
-import gymnasium as gym
-from sumo_rl import SumoEnvironment
-from typing import List, Optional, Dict, Any
+from typing import Any, List, Optional
+
+# NOTE:
+# `sumo_rl` will raise an ImportError at import-time if `SUMO_HOME` is not set.
+# To avoid breaking non-RL features (e.g. importing the MCP server), we lazily
+# import `SumoEnvironment` only when training is actually invoked.
+SumoEnvironment: Any | None = None
+
+
+def _get_sumo_environment_class() -> Any:
+    """Return `sumo_rl.SumoEnvironment`, importing it lazily."""
+    global SumoEnvironment
+    if SumoEnvironment is None:
+        from sumo_rl import SumoEnvironment as imported_sumo_environment
+
+        SumoEnvironment = imported_sumo_environment
+    return SumoEnvironment
+
 
 def list_rl_scenarios() -> List[str]:
     """
@@ -20,6 +34,7 @@ def list_rl_scenarios() -> List[str]:
         return sorted(scenarios)
     except Exception as e:
         return [f"Error listing scenarios: {str(e)}"]
+
 
 def create_rl_environment(
     net_file: str,
@@ -63,7 +78,8 @@ def run_rl_training(
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
             
-        env = SumoEnvironment(
+        env_class = _get_sumo_environment_class()
+        env = env_class(
             net_file=net_file,
             route_file=route_file,
             out_csv_name=os.path.join(out_dir, "train_results"),
