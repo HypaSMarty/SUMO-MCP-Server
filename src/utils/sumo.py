@@ -11,7 +11,7 @@ import sumolib
 logger = logging.getLogger(__name__)
 
 
-def find_sumo_binary(name: str) -> str:
+def find_sumo_binary(name: str) -> Optional[str]:
     """
     Find a SUMO binary by name.
 
@@ -20,21 +20,30 @@ def find_sumo_binary(name: str) -> str:
     2) `shutil.which()` (respects PATH)
 
     Returns:
-        The resolved executable path (preferred) or the original name as a fallback.
+        The resolved absolute executable path, or None if it cannot be located.
     """
+    resolved: Optional[str] = None
     try:
-        resolved = sumolib.checkBinary(name)
+        candidate = sumolib.checkBinary(name)
     except Exception:
-        resolved = name
+        candidate = None
 
-    if resolved == name or not resolved:
-        which = shutil.which(name)
-        return which or name
+    if candidate and candidate != name:
+        resolved = candidate
 
-    return resolved
+    if resolved:
+        resolved_path = Path(resolved)
+        if resolved_path.is_absolute():
+            return resolved
+        return shutil.which(resolved)
+
+    return shutil.which(name)
 
 
-def _candidate_sumo_home_from_binary(sumo_binary: str) -> Optional[Path]:
+def _candidate_sumo_home_from_binary(sumo_binary: Optional[str]) -> Optional[Path]:
+    if not sumo_binary:
+        return None
+
     path = Path(sumo_binary)
     if not path.is_absolute():
         return None

@@ -114,7 +114,7 @@ P1-2,重构 find_sumo_binary 返回值为 Optional 类型,"**文件位置：**
 5. 在无 SUMO 环境运行 `run_simple_simulation()`，验证错误消息正确显示","1. 确认返回类型注解为 `Optional[str]`（不是 `Union[str, None]`）
 2. 验证 `sumolib.checkBinary` 返回非路径字符串时也返回 `None`
 3. 检查所有 `if sumo_binary == ` 的字符串比较都已移除
-4. 确保向后兼容：如果有外部代码调用此函数，需在 CHANGELOG 注明 breaking change",未开始,等待确认
+4. 确保向后兼容：如果有外部代码调用此函数，需在 CHANGELOG 注明 breaking change",已完成,已完成
 P2-1,细化异常捕获范围避免隐藏错误,"**文件位置：** `src/utils/sumo.py:20-23`（`find_sumo_binary` 函数）
 
 **当前问题：**

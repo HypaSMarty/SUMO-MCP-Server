@@ -1,11 +1,8 @@
-import sys
-import json
 import logging
-import inspect
-import traceback
 import subprocess
-import os
-from typing import Optional, List, Any, Dict, Callable, Union
+from typing import Any, Dict, Optional
+
+from mcp.server.fastmcp import FastMCP
 
 from mcp_tools.simulation import run_simple_simulation
 from mcp_tools.network import netconvert, netgenerate, osm_get
@@ -17,159 +14,19 @@ from mcp_tools.vehicle import (
     get_vehicle_acceleration, get_vehicle_lane, get_vehicle_route,
     get_simulation_info
 )
-from mcp_tools.rl import list_rl_scenarios, create_rl_environment, run_rl_training
+from mcp_tools.rl import list_rl_scenarios, run_rl_training
 from utils.connection import connection_manager
+from utils.sumo import find_sumo_binary, find_sumo_home, find_sumo_tools_dir
 from workflows.sim_gen import sim_gen_workflow
 from workflows.signal_opt import signal_opt_workflow
 from workflows.rl_train import rl_train_workflow
 
-# Configure logging to stderr to not interfere with stdout JSON-RPC
-logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging to stderr to not interfere with MCP stdio transport
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class MCPServer:
-    def __init__(self, name: str, version: str) -> None:
-        self.name = name
-        self.version = version
-        self.tools: Dict[str, Dict[str, Any]] = {}
-
-    def tool(self, name: Optional[str] = None, description: Optional[str] = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            tool_name = name or func.__name__
-            tool_desc = description or func.__doc__ or ""
-            # Inspect parameters
-            sig = inspect.signature(func)
-            params: Dict[str, Any] = {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-            for param_name, param in sig.parameters.items():
-                param_type = "string" # simplified type mapping
-                if param.annotation == int:
-                    param_type = "integer"
-                elif param.annotation == bool:
-                    param_type = "boolean"
-                elif param.annotation == float:
-                    param_type = "number"
-                elif param.annotation == list or param.annotation == List[str] or param.annotation == Optional[List[str]]:
-                     # Basic support for list of strings, mostly for options
-                     param_type = "array"
-                elif param.annotation == dict or param.annotation == Dict[str, Any] or param.annotation == Optional[Dict[str, Any]]:
-                     # Support for dict parameters (for consolidated tools)
-                     param_type = "object"
-                
-                params["properties"][param_name] = {
-                    "type": param_type,
-                    "description": "" # Could parse from docstring
-                }
-                if param_type == "array":
-                     params["properties"][param_name]["items"] = {"type": "string"}
-
-                if param.default == inspect.Parameter.empty:
-                    params["required"].append(param_name)
-            
-            self.tools[tool_name] = {
-                "func": func,
-                "schema": {
-                    "name": tool_name,
-                    "description": tool_desc,
-                    "inputSchema": params
-                }
-            }
-            return func
-        return decorator
-
-    def run(self) -> None:
-        logger.info(f"Starting {self.name} v{self.version}")
-        # On Windows, using sys.stdin might be tricky with some buffering, but usually works
-        while True:
-            try:
-                line = sys.stdin.readline()
-                if not line:
-                    break
-                if not line.strip():
-                    continue
-                request = json.loads(line)
-                self.handle_request(request)
-            except json.JSONDecodeError:
-                logger.error(f"Invalid JSON: {line}")
-            except Exception as e:
-                logger.error(f"Error processing line: {e}")
-                traceback.print_exc(file=sys.stderr)
-
-    def handle_request(self, request: Dict[str, Any]) -> None:
-        msg_id = request.get("id")
-        method = request.get("method")
-        params = request.get("params", {})
-
-        if method == "initialize":
-            self.send_response(msg_id, {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {
-                    "tools": {}
-                },
-                "serverInfo": {
-                    "name": self.name,
-                    "version": self.version
-                }
-            })
-        elif method == "notifications/initialized":
-            # No response needed
-            pass
-        elif method == "tools/list":
-            self.send_response(msg_id, {
-                "tools": [t["schema"] for t in self.tools.values()]
-            })
-        elif method == "tools/call":
-            tool_name = params.get("name")
-            tool_args = params.get("arguments", {})
-            if tool_name in self.tools:
-                try:
-                    result = self.tools[tool_name]["func"](**tool_args)
-                    self.send_response(msg_id, {
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": str(result)
-                            }
-                        ]
-                    })
-                except Exception as e:
-                    logger.error(f"Error calling tool {tool_name}: {e}")
-                    self.send_error(msg_id, -32603, str(e))
-            else:
-                self.send_error(msg_id, -32601, f"Tool {tool_name} not found")
-        elif method == "ping":
-             self.send_response(msg_id, {})
-        else:
-            # Ignore other methods or return error
-            if msg_id is not None:
-                self.send_error(msg_id, -32601, f"Method {method} not found")
-
-    def send_response(self, msg_id: Optional[Union[str, int]], result: Any) -> None:
-        response = {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "result": result
-        }
-        sys.stdout.write(json.dumps(response) + "\n")
-        sys.stdout.flush()
-
-    def send_error(self, msg_id: Optional[Union[str, int]], code: int, message: str) -> None:
-        response = {
-            "jsonrpc": "2.0",
-            "id": msg_id,
-            "error": {
-                "code": code,
-                "message": message
-            }
-        }
-        sys.stdout.write(json.dumps(response) + "\n")
-        sys.stdout.flush()
-
-# Initialize Server
-server = MCPServer("SUMO-MCP-Server", "0.2.0")
+# Initialize MCP Server (official SDK)
+server = FastMCP("SUMO-MCP-Server")
 
 # --- 1. Network Management ---
 @server.tool(description="Manage SUMO network (generate, convert, or download OSM).")
@@ -383,11 +240,26 @@ def manage_rl_task(action: str, params: Optional[Dict[str, Any]] = None) -> str:
 @server.tool(name="get_sumo_info", description="Get the version and path of the installed SUMO.")
 def get_sumo_info() -> str:
     try:
-        # Check sumo version
-        result = subprocess.run(["sumo", "--version"], capture_output=True, text=True, check=True)
-        version_output = result.stdout.splitlines()[0]
-        sumo_home = os.environ.get("SUMO_HOME", "Not Set")
-        return f"SUMO Version: {version_output}\nSUMO_HOME: {sumo_home}"
+        sumo_binary = find_sumo_binary("sumo")
+        if not sumo_binary:
+            return (
+                "Error: Could not locate SUMO executable. "
+                "Please ensure SUMO is installed and either `sumo` is available in PATH or `SUMO_HOME` is set."
+            )
+
+        result = subprocess.run([sumo_binary, "--version"], capture_output=True, text=True, check=True)
+        version_output = (result.stdout.splitlines() or ["Unknown"])[0]
+
+        sumo_home = find_sumo_home()
+        tools_dir = find_sumo_tools_dir()
+        return "\n".join(
+            [
+                f"SUMO Binary: {sumo_binary}",
+                f"SUMO Version: {version_output}",
+                f"SUMO_HOME: {sumo_home or 'Not Set'}",
+                f"SUMO Tools Dir: {tools_dir or 'Not Found'}",
+            ]
+        )
     except Exception as e:
         return f"Error checking SUMO: {str(e)}"
 
@@ -400,4 +272,4 @@ def run_analysis(fcd_file: str) -> str:
     return analyze_fcd(fcd_file)
 
 if __name__ == "__main__":
-    server.run()
+    server.run(transport="stdio")

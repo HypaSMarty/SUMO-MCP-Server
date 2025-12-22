@@ -1,7 +1,7 @@
 import os
-import sys
 import traci
-import sumolib
+
+from utils.sumo import find_sumo_binary
 
 def run_simple_simulation(config_path: str, steps: int = 100) -> str:
     """
@@ -16,15 +16,13 @@ def run_simple_simulation(config_path: str, steps: int = 100) -> str:
     """
     if not os.path.exists(config_path):
         return f"Error: Config file not found at {config_path}"
-    
-    # Ensure SUMO_HOME is set
-    if 'SUMO_HOME' not in os.environ:
-         return "Error: SUMO_HOME environment variable is not set."
 
-    try:
-        sumo_binary = sumolib.checkBinary('sumo')
-    except Exception as e:
-        return f"Error finding sumo binary: {e}"
+    sumo_binary = find_sumo_binary("sumo")
+    if not sumo_binary:
+        return (
+            "Error finding sumo binary. "
+            "Please ensure SUMO is installed and either `sumo` is available in PATH or `SUMO_HOME` is set."
+        )
     
     # Start simulation
     # We use a random label to allow parallel runs if needed (though traci global lock is an issue)
