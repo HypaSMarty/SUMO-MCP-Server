@@ -221,7 +221,7 @@ P2-3,完善 README 和启动脚本的平台特定说明,"**文件位置：**
 2. 验证 Windows 路径使用反斜杠或提示用户转换
 3. 检查 Homebrew 安装命令是否为最新（`brew install sumo` 或 `brew install eclipse-sumo`）
 4. 确保启动脚本的环境检查不影响 Docker 等容器化部署
-5. 文档中添加 ""Troubleshooting"" 章节（常见问题）",未开始,等待确认
+5. 文档中添加 ""Troubleshooting"" 章节（常见问题）",已完成,已完成
 P3-1,修复 Windows 平台测试兼容性问题,"**文件位置：** `tests/test_server_jsonrpc_smoke_without_sumo_home.py`（`_read_json_line` 函数）
 
 **当前问题：**

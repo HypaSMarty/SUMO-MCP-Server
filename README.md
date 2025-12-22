@@ -43,7 +43,7 @@ SUMO-MCP 是一个连接大语言模型 (LLM) 与 Eclipse SUMO 交通仿真引�
 
 *   **操作系统**: Windows / Linux / macOS
 *   **Python**: 3.10+ (强制要求，以支持最新的类型系统与 MCP SDK)
-*   **SUMO**: Eclipse SUMO 1.23+ (需配置 `SUMO_HOME` 环境变量)
+*   **SUMO**: Eclipse SUMO 1.23+（需保证 SUMO 二进制在 `PATH` 中；如需使用 SUMO 自带 tools 脚本，建议配置 `SUMO_HOME`）
 
 ---
 
@@ -85,8 +85,28 @@ conda activate sumo-mcp
 pip install .[dev]
 ```
 
-### 4. 配置 SUMO
-确保系统环境变量 `SUMO_HOME` 指向您的 SUMO 安装目录 (例如 `F:\sumo`)。
+### 4. 配置 SUMO (Installation & Setup)
+
+#### Important Notes
+*   **仅使用 SUMO 二进制工具**（`sumo` / `netconvert` / `netgenerate` / `duarouter` / `od2trips` 等）：保证命令在 `PATH` 中即可。
+*   **使用 SUMO tools 脚本**（`randomTrips.py` / `osmGet.py` / `tls*.py` 等）：需要能定位到 `<SUMO_HOME>/tools`，推荐设置 `SUMO_HOME` 指向 SUMO 安装目录，并把 `$SUMO_HOME/bin` 加入 `PATH`。
+
+#### Windows Setup
+1. 安装 SUMO：使用官方安装包（文档：https://sumo.dlr.de/）。
+2. 设置环境变量（示例）：
+   - CMD（持久化）：`setx SUMO_HOME "C:\Program Files\Eclipse\sumo"`，`setx PATH "%SUMO_HOME%\bin;%PATH%"`
+   - PowerShell（当前会话）：`$env:SUMO_HOME="C:\Program Files\Eclipse\sumo"; $env:PATH="$env:SUMO_HOME\bin;$env:PATH"`
+3. 验证：`sumo --version`
+
+#### Linux Setup (Ubuntu/Debian)
+1. 安装：`sudo apt-get install sumo sumo-tools`
+2. 可选（使用 tools 脚本时推荐）：`export SUMO_HOME=/usr/share/sumo` 并把 `$SUMO_HOME/bin` 加入 `PATH`
+3. 验证：`sumo --version`
+
+#### macOS Setup (Homebrew)
+1. 安装：`brew install sumo`
+2. Homebrew 通常会自动把 `sumo` 加到 `PATH`；如需 tools 脚本，可设置 `SUMO_HOME` 指向 `.../share/sumo`（例如 `/usr/local/share/sumo` 或 `/opt/homebrew/share/sumo`）
+3. 验证：`sumo --version`
 
 ---
 
@@ -98,7 +118,24 @@ pip install .[dev]
 python src/server.py
 ```
 
-服务器启动后将监听标准输入 (stdin) 的 JSON-RPC 消息，您可以将其配置到任何支持 MCP 的宿主应用中。
+也可以使用启动脚本（会自动把 `$SUMO_HOME/bin` 加入 `PATH`，并在找不到 `sumo` 时给出提示）：
+
+```bash
+# Linux/macOS
+./start_server.sh
+```
+
+```powershell
+# Windows PowerShell
+.\start_server.ps1
+```
+
+```bat
+REM Windows CMD
+start_server.bat
+```
+
+服务器基于官方 `mcp.server.fastmcp.FastMCP`，通过标准输入输出 (stdio) 传输 JSON-RPC 2.0 消息，您可以将其配置到任何支持 MCP 的宿主应用中。
 
 **Claude Desktop 配置示例**:
 ```json
@@ -111,6 +148,8 @@ python src/server.py
   }
 }
 ```
+
+更多配置示例见 `mcp_config_examples.json`。
 
 ---
 
@@ -130,12 +169,23 @@ python src/server.py
 
 ---
 
+## 🧰 Troubleshooting
+
+*   **提示找不到 `sumo`**（例如：`Error: Could not locate SUMO executable (`sumo`).`）：
+    1. 先在终端执行 `sumo --version`，确认 SUMO 二进制可用。
+    2. 若不可用：把 SUMO 的 `bin/` 加入 `PATH`，或设置 `SUMO_HOME` 并把 `$SUMO_HOME/bin` 加入 `PATH`。
+*   **提示找不到 tools 脚本**（例如：`randomTrips.py` / `osmGet.py` / `tls*.py`）：
+    1. 确认 `SUMO_HOME` 指向 SUMO 安装目录。
+    2. 确认 `<SUMO_HOME>/tools` 目录存在且包含对应脚本。
+*   **MCP 客户端无法继承环境变量**：
+    1. 在 MCP 客户端配置中显式传入 `env`（参考 `mcp_config_examples.json`）。
+
 ## 📂 项目结构
 
 ```text
 sumo-mcp/
 ├── src/
-│   ├── server.py           # MCP 服务器入口 (LiteMCP 实现，聚合接口)
+│   ├── server.py           # MCP 服务器入口 (FastMCP 实现，聚合接口)
 │   ├── utils/              # 通用工具
 │   │   ├── connection.py   # TraCI 连接管理器
 │   │   └── ...
