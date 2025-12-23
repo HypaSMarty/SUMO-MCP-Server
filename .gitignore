@@ -160,6 +160,7 @@ routes.rou.xml
 
 # Example outputs (keep source examples but ignore generated outputs)
 examples/signal_opt_*/
+examples/signal_optimization_*/
 examples/output_*/
 examples/*.net.xml
 examples/*.rou.xml
@@ -181,3 +182,6 @@ secrets.py
 kiro_test/
 .kiro/
 tests/
+
+# Local SUMO distribution copy (too large for git)
+sumo/

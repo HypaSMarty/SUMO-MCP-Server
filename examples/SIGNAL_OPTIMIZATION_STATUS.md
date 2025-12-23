@@ -77,7 +77,7 @@ run_simple_simulation(baseline_cfg, 1800)
 ```python
 tls_cycle_adaptation(net_file, routes_file, optimized_net)
 ```
-**输出：** 优化后的网络文件
+**输出：** 优化后的信号灯方案（SUMO `<additional>` 文件，包含 `<tlLogic>` 等信号灯程序），不是完整的 `.net.xml` 路网文件
 
 ### ⚠️ 步骤 6：优化仿真（已知问题）
 ```python
@@ -86,9 +86,8 @@ run_simple_simulation(optimized_cfg, 1800)
 **状态：** TraCI 连接错误："Connection closed by SUMO"
 
 **可能原因：**
-1. `tls_cycle_adaptation` 输出的网络文件格式兼容性问题
-2. SUMO 版本特定的 TraCI 问题
-3. 优化后网络需要额外的验证步骤
+1. `optimized.sumocfg` 将 `tls_cycle_adaptation` 的输出文件当作 `<net-file>`（路网）加载，SUMO 报错 `Invalid network, no network version declared` 后退出，导致 TraCI 连接被关闭
+2. 正确用法应为：`<net-file>` 仍使用原始 `grid.net.xml`，并在 `<additional-files>` 中引用优化输出文件
 
 ## 使用方法
 
@@ -114,7 +113,7 @@ examples/signal_opt_YYYYMMDD_HHMMSS/
 ├── routes.xml             # 计算后的路径
 ├── baseline.sumocfg       # 基线配置
 ├── baseline_fcd.xml       # 基线仿真数据 ✅
-├── optimized.net.xml      # 优化后网络
+├── optimized.net.xml      # 优化后信号灯方案（additional 文件）
 ├── optimized.sumocfg      # 优化配置
 └── optimized_fcd.xml      # 优化仿真数据（如果成功）
 ```

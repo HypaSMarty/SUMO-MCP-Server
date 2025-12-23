@@ -21,6 +21,7 @@ import os
 import sys
 import shutil
 import time
+from typing import List, Optional
 
 # Add src to path for direct execution
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -193,7 +194,10 @@ class SignalOptimizationScenario:
             return True  # Continue with original network
 
         self.print_status("Signal timings optimized")
-        self.print_status(f"Optimized network: {os.path.basename(self.optimized_net)}")
+        if self._is_additional_file(self.optimized_net):
+            self.print_status(f"Optimized TLS program: {os.path.basename(self.optimized_net)}")
+        else:
+            self.print_status(f"Optimized network: {os.path.basename(self.optimized_net)}")
 
         return True
 
@@ -206,12 +210,19 @@ class SignalOptimizationScenario:
             self.print_status("Optimized network not found, using original", False)
             shutil.copy2(self.net_file, self.optimized_net)
 
+        additional_files: Optional[List[str]] = None
+        net_for_optimized_sim = self.optimized_net
+        if self._is_additional_file(self.optimized_net):
+            additional_files = [self.optimized_net]
+            net_for_optimized_sim = self.net_file
+
         self._create_config(
             self.optimized_cfg,
-            self.optimized_net,
+            net_for_optimized_sim,
             self.routes_file,
             self.optimized_fcd,
-            self.config['simulation_steps']
+            self.config['simulation_steps'],
+            additional_files=additional_files,
         )
 
         # Add small delay to ensure file system sync
@@ -309,7 +320,8 @@ class SignalOptimizationScenario:
         net_file: str,
         route_file: str,
         fcd_file: str,
-        steps: int
+        steps: int,
+        additional_files: Optional[List[str]] = None,
     ) -> None:
         """Create SUMO configuration file."""
         cfg_dir = os.path.dirname(os.path.abspath(cfg_path))
@@ -320,11 +332,17 @@ class SignalOptimizationScenario:
             except ValueError:
                 return os.path.basename(path)
 
+        additional_str = ""
+        if additional_files:
+            val = ",".join(relpath(p) for p in additional_files)
+            additional_str = f'        <additional-files value="{val}"/>\n'
+
         with open(cfg_path, 'w', encoding='utf-8') as f:
             f.write(f"""<configuration>
     <input>
         <net-file value="{relpath(net_file)}"/>
         <route-files value="{relpath(route_file)}"/>
+{additional_str.rstrip()}
     </input>
     <time>
         <begin value="0"/>
@@ -340,6 +358,17 @@ class SignalOptimizationScenario:
         <no-step-log value="true"/>
     </report>
 </configuration>""")
+
+    def _is_additional_file(self, file_path: str) -> bool:
+        """Return True if the file looks like a SUMO additional file (root <additional>)."""
+        if not os.path.exists(file_path):
+            return False
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                head = f.read(1000)
+            return '<additional' in head
+        except OSError:
+            return False
 
     def _extract_stats(self, fcd_file: str) -> dict:
         """Extract statistics from FCD file."""

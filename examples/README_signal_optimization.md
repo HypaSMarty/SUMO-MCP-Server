@@ -50,7 +50,7 @@ examples/signal_optimization_YYYYMMDD_HHMMSS/
 ├── routes.xml             # Computed vehicle routes
 ├── baseline.sumocfg       # Baseline simulation config
 ├── baseline_fcd.xml       # Baseline floating car data
-├── optimized.net.xml      # Network with optimized traffic lights
+├── optimized.net.xml      # TLS programs (SUMO <additional> file), not a full .net.xml
 ├── optimized.sumocfg      # Optimized simulation config
 └── optimized_fcd.xml      # Optimized floating car data
 ```

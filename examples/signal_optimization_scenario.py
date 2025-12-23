@@ -20,6 +20,7 @@ import sys
 import shutil
 import tempfile
 from pathlib import Path
+from typing import List, Optional
 
 # Add src to path for direct execution
 # Script is in examples/, so src is in parent directory
@@ -52,6 +53,17 @@ def print_result(result: str, success: bool = True) -> None:
     """Print operation result."""
     prefix = "[OK]" if success else "[FAIL]"
     print(f"{prefix} {result}")
+
+def _is_additional_file(file_path: str) -> bool:
+    """Return True if the file looks like a SUMO additional file (root <additional>)."""
+    if not os.path.exists(file_path):
+        return False
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            head = f.read(1000)
+        return '<additional' in head
+    except OSError:
+        return False
 
 
 def create_output_dir(base_name: str) -> str:
@@ -208,7 +220,10 @@ def main() -> int:
         result = tls_cycle_adaptation(net_file, routes_file, optimized_net)
 
         if "successful" in result.lower():
-            print_result(f"Optimized network saved: {optimized_net}")
+            if _is_additional_file(optimized_net):
+                print_result(f"Optimized TLS program saved: {optimized_net}")
+            else:
+                print_result(f"Optimized network saved: {optimized_net}")
             print_result("Signal timings adapted to traffic demand")
         else:
             print_result(f"Signal optimization failed: {result}", success=False)
@@ -221,13 +236,22 @@ def main() -> int:
         # ================================================================
         print_step(6, "Run optimized simulation (adapted traffic lights)")
 
-        # Create optimized config
+        # NOTE:
+        # `tlsCycleAdaptation.py` outputs an <additional> file (TLS programs), not a full .net.xml.
+        # If we pass that file as <net-file>, SUMO will fail to load the network and TraCI will disconnect.
+        additional_files: Optional[List[str]] = None
+        net_for_optimized_sim = optimized_net
+        if _is_additional_file(optimized_net):
+            additional_files = [optimized_net]
+            net_for_optimized_sim = net_file
+
         _create_simple_config(
             optimized_cfg,
-            optimized_net,
+            net_for_optimized_sim,
             routes_file,
             optimized_fcd,
-            SIMULATION_STEPS
+            SIMULATION_STEPS,
+            additional_files=additional_files,
         )
 
         result = run_simple_simulation(optimized_cfg, SIMULATION_STEPS)
@@ -287,7 +311,8 @@ def _create_simple_config(
     net_file: str,
     route_file: str,
     fcd_file: str,
-    steps: int
+    steps: int,
+    additional_files: Optional[List[str]] = None,
 ) -> None:
     """Create a simple SUMO configuration file."""
 
@@ -304,11 +329,17 @@ def _create_simple_config(
     route_value = _relpath(route_file)
     fcd_value = os.path.basename(fcd_file)
 
+    additional_str = ""
+    if additional_files:
+        val = ",".join(_relpath(p) for p in additional_files)
+        additional_str = f'        <additional-files value="{val}"/>\n'
+
     with open(cfg_path, 'w', encoding='utf-8') as f:
         f.write(f"""<configuration>
     <input>
         <net-file value="{net_value}"/>
         <route-files value="{route_value}"/>
+{additional_str.rstrip()}
     </input>
     <time>
         <begin value="0"/>
