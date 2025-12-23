@@ -1,10 +1,17 @@
-import pytest
 import os
 import shutil
+import pytest
 from src.mcp_tools.network import netgenerate
 from src.mcp_tools.route import random_trips, duarouter
 from src.mcp_tools.simulation import run_simple_simulation
 from src.mcp_tools.analysis import analyze_fcd
+
+# This module exercises real SUMO binaries/tools. Skip in environments without SUMO.
+HAS_SUMO = bool(os.environ.get("SUMO_HOME")) or shutil.which("sumo") is not None
+pytestmark = pytest.mark.skipif(
+    not HAS_SUMO,
+    reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
+)
 
 # Setup fixtures
 @pytest.fixture

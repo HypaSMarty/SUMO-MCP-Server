@@ -5,6 +5,13 @@ import json
 import shutil
 import pytest
 
+# This module runs real SUMO simulations/tools. Skip in environments without SUMO.
+HAS_SUMO = bool(os.environ.get("SUMO_HOME")) or shutil.which("sumo") is not None
+pytestmark = pytest.mark.skipif(
+    not HAS_SUMO,
+    reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
+)
+
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 

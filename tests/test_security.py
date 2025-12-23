@@ -15,7 +15,7 @@ def test_cmd_injection_netconvert():
     
     # Check that hacked.txt was NOT created
     assert not os.path.exists("hacked.txt")
-    assert "Error" in res or "failed" in res
+    assert ("error" in res.lower()) or ("failed" in res.lower())
     
 def test_path_traversal_config():
     # Attempt to read a file outside directory (though this tool just runs sumo)

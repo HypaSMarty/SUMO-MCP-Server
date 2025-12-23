@@ -1,8 +1,18 @@
-import pytest
 import os
 import shutil
 import time
-import psutil
+
+import pytest
+
+psutil = pytest.importorskip("psutil")
+
+# This module measures real workflow performance and requires SUMO.
+HAS_SUMO = bool(os.environ.get("SUMO_HOME")) or shutil.which("sumo") is not None
+pytestmark = pytest.mark.skipif(
+    not HAS_SUMO,
+    reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
+)
+
 from src.workflows.sim_gen import sim_gen_workflow
 
 @pytest.fixture

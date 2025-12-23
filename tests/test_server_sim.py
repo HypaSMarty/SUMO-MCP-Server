@@ -2,6 +2,17 @@ import subprocess
 import json
 import os
 import sys
+import shutil
+
+import pytest
+
+
+# This test runs a real SUMO simulation via the MCP server. Skip if SUMO is unavailable.
+HAS_SUMO = bool(os.environ.get("SUMO_HOME")) or shutil.which("sumo") is not None
+pytestmark = pytest.mark.skipif(
+    not HAS_SUMO,
+    reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
+)
 
 def test_sim_tool():
     server_path = os.path.join(os.path.dirname(__file__), "..", "src", "server.py")

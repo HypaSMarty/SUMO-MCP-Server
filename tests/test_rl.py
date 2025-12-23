@@ -36,22 +36,25 @@ class TestRLTools:
         env_instance.encode.return_value = "state"
         
         # Mock QLAgent
-        with patch("sumo_rl.agents.QLAgent") as mock_agent:
-            agent_instance = MagicMock()
-            mock_agent.return_value = agent_instance
-            
-            res = run_rl_training(
-                net_file="dummy.net.xml",
-                route_file="dummy.rou.xml",
-                out_dir="test_out",
-                episodes=1,
-                steps_per_episode=10
-            )
-            
-            assert "Episode 1/1" in res
-            assert "Total Reward" in res
+        # sumo-rl 在未设置 SUMO_HOME 时会在导入期抛 ImportError；这里仅为测试打桩，给一个假值即可。
+        with patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False):
+            with patch("sumo_rl.agents.QLAgent") as mock_agent:
+                agent_instance = MagicMock()
+                mock_agent.return_value = agent_instance
+                
+                res = run_rl_training(
+                    net_file="dummy.net.xml",
+                    route_file="dummy.rou.xml",
+                    out_dir="test_out",
+                    episodes=1,
+                    steps_per_episode=10
+                )
+                
+                assert "Episode 1/1" in res
+                assert "Total Reward" in res
 
 class TestRLWorkflow:
+    @patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False)
     @patch("workflows.rl_train.run_rl_training") # Patch where it is imported!
     @patch("mcp_tools.rl.list_rl_scenarios")
     @patch("os.path.exists")

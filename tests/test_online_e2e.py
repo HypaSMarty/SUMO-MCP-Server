@@ -5,6 +5,16 @@ import subprocess
 import shutil
 import time
 
+import pytest
+
+
+# This is a full online interaction test that requires a working SUMO installation.
+HAS_SUMO = bool(os.environ.get("SUMO_HOME")) or shutil.which("sumo") is not None
+pytestmark = pytest.mark.skipif(
+    not HAS_SUMO,
+    reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
+)
+
 def test_online_interaction():
     base_dir = os.path.dirname(__file__)
     fixtures_dir = os.path.join(base_dir, "fixtures", "simple_sim")

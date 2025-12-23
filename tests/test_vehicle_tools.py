@@ -16,8 +16,9 @@ class TestSUMOConnection:
         SUMOConnection._instance = None
         return SUMOConnection()
 
+    @patch("utils.connection.find_sumo_binary", return_value="/usr/bin/sumo")
     @patch("traci.start")
-    def test_connect_new(self, mock_start, conn_manager):
+    def test_connect_new(self, mock_start, _mock_find_binary, conn_manager):
         conn_manager.connect(config_file="test.sumocfg")
         mock_start.assert_called_once()
         assert conn_manager.is_connected()
