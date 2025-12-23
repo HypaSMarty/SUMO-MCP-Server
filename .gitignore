@@ -159,6 +159,7 @@ routes.rou.xml
 *.rar
 test_rl_output/
 test_rl_training.py
+TEST_REPORT_FIXES.md
 
 # Example outputs (keep source examples but ignore generated outputs)
 examples/signal_opt_*/
