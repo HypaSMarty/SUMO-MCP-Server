@@ -33,8 +33,9 @@ def find_sumo_binary(name: str) -> Optional[str]:
         resolved = candidate
 
     if resolved:
-        resolved_path = Path(resolved)
-        if resolved_path.is_absolute():
+        # Trust sumolib's result if it looks like an absolute path
+        # Use os.path.isabs for cross-platform compatibility (handles /usr/bin on Windows)
+        if os.path.isabs(resolved):
             return resolved
         return shutil.which(resolved)
 
@@ -92,7 +93,7 @@ def find_sumo_home() -> Optional[str]:
 
         # Windows Registry (optional)
         try:
-            import winreg  # type: ignore[import-not-found]
+            import winreg
 
             key_path = r"SOFTWARE\Eclipse\SUMO"
             for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
