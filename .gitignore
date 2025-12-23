@@ -158,8 +158,19 @@ test_out/
 routes.rou.xml
 *.rar
 
+# Example outputs (keep source examples but ignore generated outputs)
+examples/signal_opt_*/
+examples/output_*/
+examples/*.net.xml
+examples/*.rou.xml
+examples/*.sumocfg
+examples/*.trips.xml
+examples/*.xml
+examples/*.txt
+!examples/*.py
+!examples/*.md
+
 # Local experiments (not part of OSS release)
-examples/
 test/
 
 # Local configuration overrides (optional)
