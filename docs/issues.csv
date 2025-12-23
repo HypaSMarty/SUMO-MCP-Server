@@ -60,7 +60,7 @@ P1-4,RL: SUMO 连接中断/解包异常的诊断与稳健性,"**背景：** 用�
 2. （单元测试/Mock）模拟 `step()` 返回的 `dones` 不包含 `__all__`，验证“最大步数阈值”能终止循环
 3. （手动验证）在 Windows+SUMO 环境复现原错误场景时，返回值中必须包含 `sumo_error.log` 的路径与末尾日志片段，便于定位 SUMO 退出原因","1. 不要静默吞错：若捕获异常，应尽量保留错误类型信息与关键上下文
 2. 日志截取应限制长度（例如最后 80 行），避免 MCP 响应过大
-3. 不要把用户主目录等敏感信息原样打印（路径可保留，但注意不要输出环境中无关机密）",未开始,等待确认
+3. 不要把用户主目录等敏感信息原样打印（路径可保留，但注意不要输出环境中无关机密）",已完成,已完成
 P3-2,路网生成: Spider 参数映射无效（生成结果仍为 Grid）,"**现象（用户实测）：**
 - 调用 `manage_network(action=generate, params={spider: true, arms: 8})` 生成了文件，但网络类型仍为 Grid（文件头部 `<grid_network>`）。
 
@@ -78,7 +78,7 @@ P3-2,路网生成: Spider 参数映射无效（生成结果仍为 Grid）,"**现
 2. （手动验证）实际运行生成：输出 net 文件头部包含 spider 网络标识（不再是 `<grid_network>`）
 3. （回归）`grid=true` 逻辑保持不变","1. 参数互斥逻辑必须清晰（避免 grid/spider 同时生效）
 2. spider 参数需有合理默认值与类型校验（如 arms 为正整数）
-3. 命令行参数名需与 SUMO `netgenerate --help` 对齐（避免拼错导致 silent fallback）",未开始,等待确认
+3. 命令行参数名需与 SUMO `netgenerate --help` 对齐（避免拼错导致 silent fallback）",进行中,进行中
 P0-1,修复 pyproject.toml 打包配置,"**文件位置：** `pyproject.toml`
 
 **当前问题：**

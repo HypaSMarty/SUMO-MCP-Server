@@ -149,26 +149,45 @@ def run_rl_training(
     Run a basic RL training session using Q-Learning (default) or other algorithms.
     This runs synchronously and returns the result.
     """
+    from collections import deque
+
+    def _tail_file(path: str, max_lines: int = 80) -> Optional[str]:
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return "".join(deque(f, maxlen=max_lines)).strip()
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            return f"<Failed to read {path}: {type(e).__name__}: {e}>"
+
     try:
         if not os.path.exists(net_file):
             return f"Error: Network file not found at {net_file}"
         if not os.path.exists(route_file):
             return f"Error: Route file not found at {route_file}"
 
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+        out_dir_abs = os.path.abspath(out_dir)
+        os.makedirs(out_dir_abs, exist_ok=True)
+
+        # Capture SUMO diagnostics into deterministic local files (avoid paths with spaces
+        # since sumo-rl splits additional_sumo_cmd by whitespace).
+        sumo_error_log_name = "sumo_error.log"
+        sumo_error_log_path = os.path.join(out_dir_abs, sumo_error_log_name)
             
         env_class = _get_sumo_environment_class()
         env = None
+        orig_cwd = os.getcwd()
         try:
+            os.chdir(out_dir_abs)
             env = env_class(
                 net_file=net_file,
                 route_file=route_file,
-                out_csv_name=os.path.join(out_dir, "train_results"),
+                out_csv_name=os.path.join(out_dir_abs, "train_results"),
                 use_gui=False,
                 num_seconds=steps_per_episode,
                 reward_fn=reward_type,
                 single_agent=False,
+                additional_sumo_cmd=f"--error-log {sumo_error_log_name}",
             )
 
             if not getattr(env, "ts_ids", None):
@@ -190,21 +209,31 @@ def run_rl_training(
             info_log: list[str] = []
 
             for ep in range(1, episodes + 1):
-                obs = env.reset()
+                reset_result = env.reset()
+                if isinstance(reset_result, tuple) and len(reset_result) == 2:
+                    obs = reset_result[0]
+                else:
+                    obs = reset_result
+
+                single_agent_mode = False
                 if not isinstance(obs, dict):
-                    return (
-                        "Training failed: Unexpected observation type from sumo-rl reset(). "
-                        f"Expected dict, got {type(obs).__name__}."
-                    )
+                    single_agent_mode = True
+                    ts_ids = getattr(env, "ts_ids", None) or ["ts_0"]
+                    obs = {ts_ids[0]: obs}
 
                 # Align agent state to the new episode start.
                 for ts_id, ts_obs in obs.items():
                     state = env.encode(ts_obs, ts_id)
                     if ts_id not in agents:
-                        action_space = env.action_spaces(ts_id)
+                        if single_agent_mode:
+                            action_space = env.action_space
+                            state_space = env.observation_space
+                        else:
+                            action_space = env.action_spaces(ts_id)
+                            state_space = env.observation_spaces(ts_id)
                         agents[ts_id] = QLAgent(
                             starting_state=state,
-                            state_space=env.observation_spaces(ts_id),
+                            state_space=state_space,
                             action_space=action_space,
                             alpha=0.1,
                             gamma=0.99,
@@ -219,21 +248,47 @@ def run_rl_training(
 
                 ep_total_reward = 0.0
                 dones: dict[str, bool] = {"__all__": False}
+                decision_steps = 0
+                delta_time = getattr(env, "delta_time", 1)
+                try:
+                    delta_time_int = int(delta_time)
+                except (TypeError, ValueError):
+                    delta_time_int = 1
+                max_decisions = max(1, int(steps_per_episode / max(1, delta_time_int))) + 10
 
-                while not dones.get("__all__", False):
+                done_all = False
+                while not done_all and decision_steps < max_decisions:
                     # sumo-rl returns observations/rewards only for agents that are ready to act.
-                    actions = {ts_id: agents[ts_id].act() for ts_id in obs.keys() if ts_id in agents}
+                    if single_agent_mode:
+                        ts_id = next(iter(obs.keys()), None)
+                        action = agents[ts_id].act() if ts_id in agents else None
+                        step_result = env.step(action)
+                    else:
+                        actions = {ts_id: agents[ts_id].act() for ts_id in obs.keys() if ts_id in agents}
+                        step_result = env.step(actions)
 
-                    step_result = env.step(actions)
-                    if not (isinstance(step_result, tuple) and len(step_result) == 4):
+                    if not isinstance(step_result, tuple):
+                        return "Training failed: Unexpected return value from sumo-rl step()."
+
+                    if len(step_result) == 4:
+                        next_obs, rewards, dones, _info = step_result
+                        if not isinstance(next_obs, dict) or not isinstance(rewards, dict) or not isinstance(dones, dict):
+                            return "Training failed: Unexpected types returned from sumo-rl step()."
+                        done_all = bool(dones.get("__all__", False))
+                        if "__all__" not in dones:
+                            done_all = all(bool(v) for v in dones.values()) if dones else False
+                    elif len(step_result) == 5:
+                        obs_val, reward_val, terminated, truncated, _info = step_result
+                        ts_ids = getattr(env, "ts_ids", None) or ["ts_0"]
+                        next_obs = {ts_ids[0]: obs_val}
+                        rewards = {ts_ids[0]: reward_val}
+                        done_all = bool(terminated) or bool(truncated)
+                        dones = {"__all__": done_all, ts_ids[0]: done_all}
+                    else:
                         return (
                             "Training failed: Unexpected return value from sumo-rl step(). "
-                            "Expected (obs, rewards, dones, info)."
+                            f"Expected 4-tuple or 5-tuple, got {len(step_result)}."
                         )
-                    next_obs, rewards, dones, _info = step_result
-
-                    if not isinstance(next_obs, dict) or not isinstance(rewards, dict) or not isinstance(dones, dict):
-                        return "Training failed: Unexpected types returned from sumo-rl step()."
 
                     for ts_id, reward in rewards.items():
                         if ts_id not in agents:
@@ -248,6 +303,7 @@ def run_rl_training(
                         ep_total_reward += float(reward)
 
                     obs = next_obs
+                    decision_steps += 1
 
                 info_log.append(f"Episode {ep}/{episodes}: Total Reward = {ep_total_reward:.2f}")
 
@@ -257,6 +313,10 @@ def run_rl_training(
 
             return "\n".join(info_log)
         finally:
+            try:
+                os.chdir(orig_cwd)
+            except Exception:
+                pass
             if env is not None:
                 try:
                     env.close()
@@ -264,4 +324,26 @@ def run_rl_training(
                     pass
             
     except Exception as e:
-        return f"Training failed: {str(e)}"
+        diagnostics: list[str] = [
+            f"Training failed: {type(e).__name__}: {e}",
+            f"- SUMO_HOME: {os.environ.get('SUMO_HOME', 'Not Set')}",
+            f"- sumo_binary: {None}",
+            f"- net_file: {net_file}",
+            f"- route_file: {route_file}",
+            f"- out_dir: {out_dir}",
+        ]
+
+        try:
+            from utils.sumo import find_sumo_binary
+
+            diagnostics[2] = f"- sumo_binary: {find_sumo_binary('sumo') or 'Not Found'}"
+        except Exception:
+            diagnostics.pop(2)
+
+        tail = _tail_file(sumo_error_log_path) if "sumo_error_log_path" in locals() else None
+        if tail:
+            diagnostics.append(f"- sumo_error_log: {sumo_error_log_path}")
+            diagnostics.append("---- sumo_error.log (tail) ----")
+            diagnostics.append(tail)
+
+        return "\n".join(diagnostics)
