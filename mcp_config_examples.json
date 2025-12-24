@@ -1,0 +1,50 @@
+{
+  "description": "SUMO-MCP 客户端配置示例 - 适用于 Claude Desktop 等 MCP 客户端",
+
+  "claude_desktop_windows": {
+    "mcpServers": {
+      "sumo-mcp": {
+        "command": "<REPO_ROOT>\\start_server.bat"
+      }
+    }
+  },
+
+  "claude_desktop_windows_with_python": {
+    "mcpServers": {
+      "sumo-mcp": {
+        "command": "<PYTHON_EXE_PATH>",
+        "args": ["<REPO_ROOT>\\src\\server.py"],
+        "env": {
+          "SUMO_HOME": "<SUMO_HOME>",
+          "PATH": "<SUMO_HOME>\\bin;%PATH%"
+        }
+      }
+    }
+  },
+
+  "claude_desktop_linux_macos": {
+    "mcpServers": {
+      "sumo-mcp": {
+        "command": "<PYTHON_EXE_PATH>",
+        "args": ["<REPO_ROOT>/src/server.py"],
+        "env": {
+          "SUMO_HOME": "<SUMO_HOME>",
+          "PATH": "<SUMO_HOME>/bin:${PATH}"
+        }
+      }
+    }
+  },
+
+  "notes": {
+    "config_location": {
+      "windows": "%APPDATA%\\Claude\\claude_desktop_config.json",
+      "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "linux": "~/.config/Claude/claude_desktop_config.json"
+    },
+    "tips": [
+      "外部依赖路径（如 SUMO_HOME、Python）建议使用系统环境变量或在此处显式传入 env",
+      "使用 start_server.bat/start_server.ps1 (Windows) 或 start_server.sh (Linux/macOS) 可以简化配置",
+      "配置完成后重启 Claude Desktop 使配置生效"
+    ]
+  }
+}
