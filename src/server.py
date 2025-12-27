@@ -82,8 +82,17 @@ def manage_demand(action: str, net_file: str, output_file: str, params: Optional
     options = params.get("options")
     
     if action == "generate_random" or action == "random_trips":
-        end_time = params.get("end_time", 3600)
-        period = params.get("period", 1.0)
+        # Backward/compat aliases: some clients use `end` instead of `end_time`.
+        end_time_raw = params.get("end_time", params.get("end", 3600))
+        period_raw = params.get("period", 1.0)
+        try:
+            end_time = int(end_time_raw)
+        except (TypeError, ValueError):
+            return f"Error: end_time must be an integer, got {end_time_raw!r}"
+        try:
+            period = float(period_raw)
+        except (TypeError, ValueError):
+            return f"Error: period must be a number, got {period_raw!r}"
         return random_trips(net_file, output_file, end_time, period, options)
         
     elif action == "convert_od" or action == "od_matrix":

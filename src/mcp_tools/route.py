@@ -41,7 +41,7 @@ def duarouter(net_file: str, route_files: str, output_file: str, options: Option
     """
     try:
         binary = sumolib.checkBinary('duarouter')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding duarouter: {e}"
         
     cmd = [binary, "-n", net_file, "--route-files", route_files, "-o", output_file, "--ignore-errors"]
@@ -67,7 +67,7 @@ def od2trips(od_file: str, output_file: str, options: Optional[List[str]] = None
     """
     try:
         binary = sumolib.checkBinary('od2trips')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding od2trips: {e}"
         
     cmd = [binary, "--od-matrix-files", od_file, "-o", output_file]

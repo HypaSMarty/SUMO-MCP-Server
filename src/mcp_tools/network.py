@@ -12,7 +12,7 @@ def netconvert(osm_file: str, output_file: str, options: Optional[List[str]] = N
     """
     try:
         binary = sumolib.checkBinary('netconvert')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding netconvert: {e}"
 
     cmd = [binary, "--osm-files", osm_file, "-o", output_file]
@@ -33,7 +33,7 @@ def netgenerate(output_file: str, grid: bool = True, grid_number: int = 3, optio
     """
     try:
         binary = sumolib.checkBinary('netgenerate')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding netgenerate: {e}"
 
     cmd = [binary, "-o", output_file]

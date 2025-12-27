@@ -290,6 +290,9 @@ python src/server.py
 *   **提示找不到 tools 脚本**（例如：`randomTrips.py` / `osmGet.py` / `tls*.py`）：
     1. 确认 `SUMO_HOME` 指向 SUMO 安装目录。
     2. 确认 `<SUMO_HOME>/tools` 目录存在且包含对应脚本。
+*   **MCP 调用卡住 / 响应显示 `undefined`**：
+    1. 该项目通过 stdio 传输 JSON-RPC，任何子进程（SUMO / tools 脚本）向标准输出打印的非 JSON 文本都可能污染通信，导致宿主无法解析响应。
+    2. 升级到最新版本（已将 TraCI 启动的 SUMO stdout 做隔离），或确保相关子进程输出被捕获/重定向。
 *   **MCP 客户端无法继承环境变量**：
     1. 在 MCP 客户端配置中显式传入 `env`（参考 `mcp_config_examples.json`）。
 

@@ -339,3 +339,17 @@ P3-1,修复 Windows 平台测试兼容性问题,"**文件位置：** `tests/test
 3. 考虑使用第三方库如 `pytest-timeout` 简化实现
 4. 检查是否有其他测试文件存在类似问题（全局搜索 `selectors`）
 5. 更新测试文档说明跨平台兼容性",已完成,已完成
+P0-4,MCP: 修复调用卡住/undefined（stdio 污染 + random_trips 参数兼容）,"**背景：** GitHub Issue #1 / 用户反馈：在宿主侧调用 `manage_demand(random_trips)` 或 `run_workflow(sim_gen_eval)` 时，界面显示一直处理中，响应区域为 `undefined`，但磁盘上已生成部分输出文件。
+
+**根因：**
+1. MCP 使用 stdio 传输 JSON-RPC；任何非 JSON 文本写入 stdout 都会污染协议流，导致宿主无法解析响应。
+2. 用户侧常见参数误用：random_trips 使用 `end` 而非 `end_time`，旧实现会回落到默认 `3600`，导致工具长时间运行，宿主看起来像卡住。
+
+**修复内容：**
+1. 确保所有 TraCI 启动的 SUMO 进程 stdout 不会写入 MCP stdout（重定向到 DEVNULL）。
+2. `manage_demand(random_trips)` 兼容 `params.end` 作为 `end_time` 别名，并对 `end_time/period` 做类型校验，避免 silent fallback。
+3. 文档与测试补齐：API 文档标注别名；增加/完善回归测试覆盖。","1. 执行 `pytest tests/test_api_aliases.py -v` 通过，且覆盖 `end` 别名调用
+2. 执行 `pytest tests/test_traci_stdout_redirect.py -v` 通过，验证 `traci.start(..., stdout=DEVNULL)` 被传入
+3. `doc/API.md` 与 `src/server.py` 参数契约一致（`end_time` + `end`）","1. 不改变现有 action 名称与返回类型
+2. 不在 server stdout 打印任何非 JSON 内容（日志必须走 stderr）
+3. 参数兼容必须显式、可预测：冲突时以 `end_time` 优先，错误时给出清晰提示",已完成,已完成

@@ -70,7 +70,7 @@
     *   `net_file` (string): 基础路网文件路径。
     *   `output_file` (string): 输出文件路径。
     *   `params` (object, optional): 具体操作参数：
-        *   `generate_random` / `random_trips`: `{ "end_time": int, "period": float }`
+        *   `generate_random` / `random_trips`: `{ "end_time": int, "end": int, "period": float }`（`end` 为兼容别名）
         *   `convert_od` / `od_matrix`: `{ "od_file": string }`
         *   `compute_routes` / `routing`: `{ "route_files": string }` (输入 trips 文件路径)
         *   `options`: `list[string]`，追加到底层命令的额外参数（见“通用约定”）

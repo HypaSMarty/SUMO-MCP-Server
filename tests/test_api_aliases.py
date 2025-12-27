@@ -21,6 +21,12 @@ class TestAPIAliases(unittest.TestCase):
         # Test 'random_trips' alias
         result = manage_demand("random_trips", "net.net.xml", "trips.trips.xml", {"end_time": 100})
         mock_random_trips.assert_called_with("net.net.xml", "trips.trips.xml", 100, 1.0, None)
+
+    @patch('server.random_trips')
+    def test_manage_demand_end_alias(self, mock_random_trips):
+        # Compatibility: accept `end` as alias of `end_time`
+        result = manage_demand("random_trips", "net.net.xml", "trips.trips.xml", {"end": 100})
+        mock_random_trips.assert_called_with("net.net.xml", "trips.trips.xml", 100, 1.0, None)
         
     @patch('server.tls_cycle_adaptation')
     def test_optimize_signals_alias(self, mock_cycle):
