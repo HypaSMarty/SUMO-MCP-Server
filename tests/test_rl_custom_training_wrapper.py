@@ -1,3 +1,6 @@
+import os
+import subprocess
+import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 from unittest.mock import patch
@@ -10,10 +13,34 @@ class _DummyActionSpace:
         return 0
 
 
+class _DummyQLAgent:
+    def __init__(
+        self,
+        starting_state: object,
+        state_space: object,
+        action_space: _DummyActionSpace,
+        alpha: float,
+        gamma: float,
+    ) -> None:
+        self.state = starting_state
+        self.action_space = action_space
+        self.q_table: dict[object, list[float]] = {starting_state: [0.0 for _ in range(action_space.n)]}
+        self.action = None
+        self.acc_reward = 0.0
+
+    def act(self) -> int:
+        return 0
+
+    def learn(self, next_state: object, reward: float, done: bool) -> None:
+        self.state = next_state
+        self.acc_reward += float(reward)
+
+
 class _DummyEnv:
     last_instance: "_DummyEnv | None" = None
 
     def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
         self.ts_ids = ["A", "B"]
         self.episode = 0
         self.out_csv_name = kwargs.get("out_csv_name")
@@ -69,16 +96,18 @@ def test_run_rl_training_handles_multiagent_api(tmp_path: Path) -> None:
 
     out_dir = tmp_path / "out"
 
-    with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_DummyEnv):
-        result = run_rl_training(
-            net_file=str(net_file),
-            route_file=str(route_file),
-            out_dir=str(out_dir),
-            episodes=2,
-            steps_per_episode=10,
-            algorithm="ql",
-            reward_type="diff-waiting-time",
-        )
+    with patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False):
+        with patch("sumo_rl.agents.QLAgent", _DummyQLAgent):
+            with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_DummyEnv):
+                result = run_rl_training(
+                    net_file=str(net_file),
+                    route_file=str(route_file),
+                    out_dir=str(out_dir),
+                    episodes=2,
+                    steps_per_episode=10,
+                    algorithm="ql",
+                    reward_type="diff-waiting-time",
+                )
 
     assert "Episode 1/2" in result
     assert "Episode 2/2" in result
@@ -98,15 +127,129 @@ def test_run_rl_training_requires_tls(tmp_path: Path) -> None:
     net_file.write_text("<net></net>", encoding="utf-8")
     route_file.write_text("<routes></routes>", encoding="utf-8")
 
-    with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_DummyEnvNoTLS):
+    with patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False):
+        with patch("sumo_rl.agents.QLAgent", _DummyQLAgent):
+            with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_DummyEnvNoTLS):
+                result = run_rl_training(
+                    net_file=str(net_file),
+                    route_file=str(route_file),
+                    out_dir=str(tmp_path / "out"),
+                    episodes=1,
+                    steps_per_episode=10,
+                    algorithm="ql",
+                    reward_type="diff-waiting-time",
+                )
+
+    assert "No traffic lights found" in result
+
+
+def test_run_rl_training_injects_sumo_log_files(tmp_path: Path) -> None:
+    from mcp_tools.rl import run_rl_training
+
+    net_file = tmp_path / "net.net.xml"
+    route_file = tmp_path / "routes.rou.xml"
+    net_file.write_text("<net></net>", encoding="utf-8")
+    route_file.write_text("<routes></routes>", encoding="utf-8")
+
+    out_dir = tmp_path / "out"
+
+    with patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False):
+        with patch("sumo_rl.agents.QLAgent", _DummyQLAgent):
+            with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_DummyEnv):
+                result = run_rl_training(
+                    net_file=str(net_file),
+                    route_file=str(route_file),
+                    out_dir=str(out_dir),
+                    episodes=1,
+                    steps_per_episode=1,
+                    algorithm="ql",
+                    reward_type="diff-waiting-time",
+                )
+
+    assert "Episode 1/1" in result
+    env = _DummyEnv.last_instance
+    assert env is not None
+    additional = env.kwargs.get("additional_sumo_cmd")
+    assert isinstance(additional, str)
+    assert "--error-log sumo_error.log" in additional
+    assert "--log sumo.log" in additional
+    assert "--message-log sumo_message.log" in additional
+
+
+def test_run_rl_training_times_out_when_step_hangs(tmp_path: Path) -> None:
+    from mcp_tools.rl import run_rl_training
+    from utils.timeout import TIMEOUT_CONFIGS, TimeoutConfig
+
+    class _HangingEnv(_DummyEnv):
+        def step(self, actions: Dict[str, int]):  # type: ignore[override]
+            time.sleep(0.5)
+            return super().step(actions)
+
+    net_file = tmp_path / "net.net.xml"
+    route_file = tmp_path / "routes.rou.xml"
+    net_file.write_text("<net></net>", encoding="utf-8")
+    route_file.write_text("<routes></routes>", encoding="utf-8")
+
+    out_dir = tmp_path / "out"
+
+    with patch.dict(os.environ, {"SUMO_HOME": "/tmp/sumo"}, clear=False):
+        with patch("sumo_rl.agents.QLAgent", _DummyQLAgent):
+            with patch.dict(
+                TIMEOUT_CONFIGS,
+                {
+                    "rl_training": TimeoutConfig(
+                        base_timeout=0.2,
+                        max_timeout=0.2,
+                        backoff_factor=1.5,
+                        heartbeat_interval=0.05,
+                    )
+                },
+                clear=False,
+            ):
+                with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_HangingEnv):
+                    result = run_rl_training(
+                        net_file=str(net_file),
+                        route_file=str(route_file),
+                        out_dir=str(out_dir),
+                        episodes=1,
+                        steps_per_episode=1,
+                        algorithm="ql",
+                        reward_type="diff-waiting-time",
+                    )
+
+    assert "TimeoutError" in result or "timed out" in result.lower()
+
+
+def test_run_rl_training_redirects_traci_stdout(monkeypatch, tmp_path: Path) -> None:
+    from mcp_tools.rl import run_rl_training
+
+    net_file = tmp_path / "net.net.xml"
+    route_file = tmp_path / "routes.rou.xml"
+    net_file.write_text("<net></net>", encoding="utf-8")
+    route_file.write_text("<routes></routes>", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def fake_traci_start(*args, **kwargs):
+        captured["stdout"] = kwargs.get("stdout")
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr("traci.start", fake_traci_start, raising=False)
+
+    class _EnvCallsTraciStart:
+        def __init__(self, **kwargs: Any) -> None:
+            import traci
+
+            traci.start(["sumo"])
+
+    with patch("mcp_tools.rl._get_sumo_environment_class", return_value=_EnvCallsTraciStart):
         result = run_rl_training(
             net_file=str(net_file),
             route_file=str(route_file),
             out_dir=str(tmp_path / "out"),
             episodes=1,
-            steps_per_episode=10,
-            algorithm="ql",
-            reward_type="diff-waiting-time",
+            steps_per_episode=1,
         )
 
-    assert "No traffic lights found" in result
+    assert captured["stdout"] is subprocess.DEVNULL
+    assert "Training failed" in result

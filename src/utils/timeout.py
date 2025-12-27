@@ -8,6 +8,7 @@
 """
 
 import logging
+import inspect
 import subprocess
 import threading
 import time
@@ -144,7 +145,7 @@ class HeartbeatTimeoutExecutor:
 
 
 def run_with_adaptive_timeout(
-    func: Callable[[], T],
+    func: Callable[..., T],
     operation: str,
     params: Optional[dict] = None,
     on_progress: Optional[Callable[[str], None]] = None,
@@ -172,14 +173,36 @@ def run_with_adaptive_timeout(
         # 使用心跳机制
         config = TIMEOUT_CONFIGS[operation]
         executor = HeartbeatTimeoutExecutor(config)
+        executor.current_timeout = timeout
 
         # 在后台线程中运行，主线程监控心跳
         result_container: dict = {"result": None, "error": None, "done": False}
 
+        heartbeat = executor.heartbeat
+
+        def _call_func() -> T:
+            try:
+                sig = inspect.signature(func)
+            except (TypeError, ValueError):
+                return func()
+
+            params = list(sig.parameters.values())
+            if not params:
+                return func()
+
+            first = params[0]
+            if first.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.VAR_POSITIONAL,
+            ):
+                return func(heartbeat)
+
+            return func()
+
         def worker():
             try:
-                # 注入心跳回调
-                result_container["result"] = func()
+                result_container["result"] = _call_func()
             except Exception as e:
                 result_container["error"] = e
             finally:
@@ -189,6 +212,7 @@ def run_with_adaptive_timeout(
         thread.start()
 
         start_time = time.time()
+        poll_interval = min(1.0, max(0.1, config.heartbeat_interval / 10))
         while not result_container["done"]:
             elapsed = time.time() - start_time
 
@@ -204,7 +228,7 @@ def run_with_adaptive_timeout(
                         f"Operation '{operation}' timed out after {elapsed:.0f}s with no activity"
                     )
 
-            time.sleep(1)
+            time.sleep(poll_interval)
 
         if result_container["error"]:
             raise result_container["error"]
