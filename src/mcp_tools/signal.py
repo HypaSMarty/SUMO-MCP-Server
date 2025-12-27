@@ -3,6 +3,7 @@ import sys
 from typing import Optional, List
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+from utils.timeout import subprocess_run_with_timeout
 
 def tls_cycle_adaptation(net_file: str, route_files: str, output_file: str) -> str:
     """
@@ -22,7 +23,7 @@ def tls_cycle_adaptation(net_file: str, route_files: str, output_file: str) -> s
     cmd = [sys.executable, script, "-n", net_file, "-r", route_files, "-o", output_file]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess_run_with_timeout(cmd, operation="tlsCycleAdaptation", check=True)
         return f"tlsCycleAdaptation successful.\nStdout: {result.stdout}"
     except subprocess.CalledProcessError as e:
         return f"tlsCycleAdaptation failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
@@ -55,7 +56,7 @@ def tls_coordinator(net_file: str, route_files: str, output_file: str, options: 
         cmd.extend(options)
         
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess_run_with_timeout(cmd, operation="tlsCoordinator", check=True)
         return f"tlsCoordinator successful.\nStdout: {result.stdout}"
     except subprocess.CalledProcessError as e:
         return f"tlsCoordinator failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
