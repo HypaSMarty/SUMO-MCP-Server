@@ -1,4 +1,37 @@
 ID,Title,Content,Acceptance Criteria,Review Requirements,State,Labels
+P0-15,signal_opt: TLS 优化超时/失败时工作流应继续并返回可诊断信息（实现）,"**背景：** Windows 上 `run_workflow(signal_opt)` 中的 `tlsCycleAdaptation.py` 可能在小输入下也运行很久（>300s）或挂起，当前实现会直接返回 `Optimization Failed: ...`，导致 MCP 看起来“卡住/一直处理中”，并让 `tests/test_signal_opt.py` 在 Windows 失败。
+
+**现象（Windows 复现）：**
+- `tlsCycleAdaptation.py` 超时（例如 300s）
+- 工作流提前失败，未产出完整 baseline/optimized 对比结果
+
+**修复内容（实现）：**
+1. `src/workflows/signal_opt.py` 将信号优化步骤改为“best-effort”：
+   - 首选用户指定方法（cycle_adaptation / coordinator）
+   - 失败/超时时尝试回退到另一方法
+   - 两者都失败时不终止工作流：继续使用 baseline net 运行 optimized 仿真，并在结果中明确标注优化失败原因
+2. 输出中增加可诊断信息：记录使用的方法、是否回退/降级、原始错误摘要
+3. 兼容跨平台：不新增 stdout 输出，所有日志走 stderr
+
+**影响范围：** `run_workflow(signal_opt)` 端到端稳定性、Windows 测试稳定性","1. 当 `tls_cycle_adaptation()` 返回超时/错误字符串时，`signal_opt_workflow()` 仍返回包含 `Signal Optimization Workflow Completed` 的文本，并包含明确的降级/回退提示
+2. 回退路径：当 cycle_adaptation 失败但 coordinator 成功时，结果中能看到回退方法与其输出摘要
+3. 执行 `pytest tests/test_workflows_signal_opt_fallback.py -q` 通过（不依赖真实 SUMO）","1. 降级逻辑必须显式输出（避免“silent fallback”）
+2. 不改变现有参数语义与返回类型（仍返回 string）
+3. 不在 stdout 打印任何非 JSON 内容（日志必须走 stderr）",已完成,已完成
+P0-16,Tests: signal_opt TLS 优化超时回退（验收补齐测试）,"**背景：** `signal_opt_workflow` 需要在 TLS 工具超时/失败时仍能稳定返回结果（并清晰告知降级/回退），该行为必须有不依赖真实 SUMO 的单测覆盖，避免 Windows 上“偶发超时”导致回归。
+
+**修复内容（测试）：**
+1. 新增 `tests/test_workflows_signal_opt_fallback.py`：
+   - mock `tls_cycle_adaptation` 超时
+   - mock `tls_coordinator` 成功（验证回退）
+   - mock `run_simple_simulation/analyze_fcd`（避免依赖真实 SUMO）
+2. 断言返回文本包含：
+   - `Signal Optimization Workflow Completed`
+   - 明确的回退/降级提示
+
+**影响范围：** 回归可信度、跨平台稳定性","1. `pytest tests/test_workflows_signal_opt_fallback.py -q` 通过
+2. 测试在无 SUMO 环境也可运行（纯 mock）","1. 不引入新的第三方依赖
+2. Windows/Linux/macOS 路径处理使用 `tmp_path/Path`，不写死分隔符",未开始,等待确认
 P0-3,完善 .gitignore 忽略本地第三方源码/测试资产,"**背景：** 当前仓库用于开源发布，但本地为了调试会下载/复制大体量依赖与测试资产（如 `sumo-rl` 源码包、路网样例、压缩包等）。这些文件一旦被 git 追踪会导致仓库膨胀、提交困难，并阻塞 push。
 
 **当前问题：**
@@ -18,7 +51,7 @@ P0-3,完善 .gitignore 忽略本地第三方源码/测试资产,"**背景：** �
 3. 规则生效后不影响代码检索（例如 `rg -n run_rl_training src/` 正常）","1. 忽略规则尽量精确（优先目录/特定前缀，不要用过宽的 `*`）
 2. 不要把 `examples/` 下的开源示例产物误忽略（已有反向规则需保留）
 3. 不修改现有已生效的 Python/IDE 通用 ignore 规则",已完成,已完成
-P1-3,RL: 统一参数入口并兼容 scenario/路径两种调用,"**背景：** 目前用户侧存在多种调用方式与参数命名（`episodes` vs `num_episodes`、`out_dir` vs `output_dir`、以及把 `scenario` 误传给 `train_custom`）。导致 RL 训练经常在参数解析阶段失败或行为不确定。
+P1-3a,RL: 统一参数入口并兼容 scenario/路径两种调用（实现）,"**背景：** 目前用户侧存在多种调用方式与参数命名（`episodes` vs `num_episodes`、`out_dir` vs `output_dir`、以及把 `scenario` 误传给 `train_custom`）。导致 RL 训练经常在参数解析阶段失败或行为不确定。
 
 **已知现象（用户实测）：**
 - `Training failed: not enough values to unpack (expected 2, got 1)`
@@ -45,6 +78,14 @@ P1-3,RL: 统一参数入口并兼容 scenario/路径两种调用,"**背景：** 
 2. （手动验证）在 Windows+SUMO 环境执行 MCP 调用：`manage_rl_task(train_custom, {scenario: '3x3grid', episodes: 1, steps: 100})` 能进入训练流程（不再出现参数级错误）","1. 参数兼容必须“显式、可预测”：同义字段冲突时要有确定优先级并在返回值中提示
 2. 别名映射应集中管理（避免散落多个 if）
 3. 文档更新必须与 `src/server.py` 对齐（避免再次出现“理念一致但实现不同”）",已完成,已完成
+P1-3b,RL: train_custom 参数契约验收补齐测试,"**背景：** 将原 `P1-3` 拆分为“实现”与“验收补齐测试”，本条用于跟踪验收级单测覆盖，避免参数兼容与 scenario 解析回归。
+
+**当前覆盖：**
+- `tests/test_manage_rl_task_train_custom_acceptance.py` 覆盖 alias 字段与 scenario 解析
+
+**影响范围：** RL 训练入口回归可信度","1. `pytest tests/test_manage_rl_task_train_custom_acceptance.py -q` 通过
+2. 单测不依赖真实 SUMO/真实场景文件（通过 mock/伪造解析返回）","1. 验收测试需覆盖 alias/优先级/错误提示的关键路径
+2. 避免引入外部文件依赖（使用 tmp_path 或 mock）",已完成,已完成
 P1-4,RL: SUMO 连接中断/解包异常的诊断与稳健性,"**背景：** 用户实测出现 `Connection closed by SUMO` 与 `not enough values to unpack`。在 TraCI 场景下，这类报错常见于 SUMO 启动参数错误、net/route 不匹配、或 SUMO 进程提前退出导致的协议读写异常。
 
 **修复内容：**
@@ -558,7 +599,7 @@ P2-4,MCP: 限制工具返回的 stdout/stderr 大小（避免超大响应）,"**
 **影响范围：** 提升大输出场景稳定性","1. 单测覆盖截断逻辑与工具返回拼接
 2. `pytest -q` 通过","1. 不改变正常短输出格式
 2. 截断阈值集中配置",已完成,已完成
-P3-3,路网生成(Spider): 实现 spider 专属参数映射,"**背景：** `P3-2` 当前仅能通过 options 注入 `--spider`，但未将 `arms/ring_radius/radial_distance/...` 等参数映射到 `netgenerate` 命令，导致用户传参无效。
+P3-2a,路网生成(Spider): 实现 spider 专属参数映射（实现）,"**背景：** `P3-2` 当前仅能通过 options 注入 `--spider`，但未将 `arms/ring_radius/radial_distance/...` 等参数映射到 `netgenerate` 命令，导致用户传参无效。
 
 **修复内容：**
 1. 在 `server.manage_network(generate)` 明确 Grid/Spider 互斥：`spider=true` 时忽略 `grid/grid_number`。
@@ -569,7 +610,7 @@ P3-3,路网生成(Spider): 实现 spider 专属参数映射,"**背景：** `P3-2
 2. 参数非法时返回可读错误
 3. `pytest -q` 通过","1. 参数名必须与 SUMO CLI 对齐
 2. 不破坏现有 grid 默认行为",已完成,已完成
-P3-4,路网生成(Spider): 补齐验收单测（spider 不含 grid）,"**背景：** `P3-2/P3-3` 需要验收级单测，避免后续回归再出现“silent fallback 到 grid”。
+P3-2b,路网生成(Spider): 补齐验收单测（spider 不含 grid）（验收补齐测试）,"**背景：** `P3-2/P3-3` 需要验收级单测，避免后续回归再出现“silent fallback 到 grid”。
 
 **修复内容：**
 1. 新增单测：当 `spider=true` 时断言命令行包含 `--spider` 且不包含 `--grid`。
