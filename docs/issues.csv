@@ -479,7 +479,7 @@ P0-11,Simulation: 为 run_simple_simulation 增加自适应超时与超时回收
 2. 单测验证超时路径会调用 `traci.close()`（best-effort）
 3. 执行 `pytest -q` 通过","1. 不引入 stdout 输出
 2. 超时阈值必须通过 `utils.timeout` 统一计算/配置
-3. 不改变成功路径返回格式",未开始,等待确认
+3. 不改变成功路径返回格式",已完成,已完成
 P1-7,RL: 补齐 manage_rl_task(train_custom) 验收单测,"**背景：** `P1-3` 已实现参数同义字段与 scenario 解析，但缺少验收级单测，存在“实现漂移/回归不自知”的风险。
 
 **修复内容：**
