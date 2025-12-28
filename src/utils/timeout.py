@@ -40,8 +40,8 @@ TIMEOUT_CONFIGS = {
     "randomTrips": TimeoutConfig(base_timeout=60, max_timeout=600),
     "duarouter": TimeoutConfig(base_timeout=120, max_timeout=1800),
     "simulation": TimeoutConfig(base_timeout=60, max_timeout=1800),
-    "tlsCycleAdaptation": TimeoutConfig(base_timeout=120, max_timeout=600),
-    "tlsCoordinator": TimeoutConfig(base_timeout=120, max_timeout=600),
+    "tlsCycleAdaptation": TimeoutConfig(base_timeout=300, max_timeout=1800),
+    "tlsCoordinator": TimeoutConfig(base_timeout=300, max_timeout=1800),
 
     # Layer 3: 心跳+指数退避
     "rl_training": TimeoutConfig(
@@ -86,6 +86,26 @@ def calculate_adaptive_timeout(
         # 根据仿真步数调整
         steps = params.get("steps", 1000)
         timeout += steps * 0.01
+
+    elif operation in {"tlsCycleAdaptation", "tlsCoordinator"}:
+        # TLS tools are pure file-processing scripts: the main predictor for runtime
+        # is route file size (vehicle count) and, to a lesser extent, net size.
+        route_files_bytes = params.get("route_files_bytes", 0) or 0
+        net_file_bytes = params.get("net_file_bytes", 0) or 0
+
+        try:
+            route_files_bytes = float(route_files_bytes)
+        except (TypeError, ValueError):
+            route_files_bytes = 0
+        try:
+            net_file_bytes = float(net_file_bytes)
+        except (TypeError, ValueError):
+            net_file_bytes = 0
+
+        # Heuristic: each additional 100KB of routes adds ~1s budget.
+        timeout += route_files_bytes / 100_000
+        # Net XML tends to be smaller; use a gentler slope.
+        timeout += net_file_bytes / 500_000
 
     elif operation == "rl_training":
         # RL 训练：根据 episodes × steps 估算

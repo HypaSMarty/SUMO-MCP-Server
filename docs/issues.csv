@@ -494,6 +494,20 @@ P0-12,Tests: signal_opt 集成测试增加超时与 stderr 排水避免卡死,"*
 **影响范围：** 防止 Windows CI/本地测试卡死，提升诊断能力","1. `pytest -k signal_opt -q` 在无 SUMO 环境下仍可 skip；在有 SUMO 环境下不会无限挂起（超时会 fail）
 2. `pytest -q` 通过","1. 不将非 JSON 写入 server stdout
 2. 不引入额外依赖",已完成,已完成
+P0-13,Timeout: tlsCycleAdaptation/tlsCoordinator 在 Windows 上易误超时（需要更高基线+输入自适应）,"**背景：** Windows 环境下运行 `tlsCycleAdaptation.py`（以及 `tlsCoordinator.py`）可能因文件 I/O（网络盘/杀软）、Python 性能差异、以及脚本本身的 O(车辆×路线×连接) 复杂度而耗时显著高于 Linux/macOS。当前 MCP 默认 `base_timeout=120s` 会导致合法任务被误判为超时，表现为工作流 `signal_opt` 直接失败。
+
+**第一性原理：**
+- 固定超时在跨平台 + 可变输入规模的工具链上必然产生误报。
+- 对于纯文件处理类 SUMO Python 工具，耗时主要与 route 文件体量（车辆数）与网络复杂度相关，应采用“基线更保守 + 基于输入体量自适应”的策略。
+
+**修复内容：**
+1. 调整 `TIMEOUT_CONFIGS`：将 `tlsCycleAdaptation/tlsCoordinator` 的 `base_timeout` 提升到更保守的值（建议 300s），并保留合理 `max_timeout`（建议 1800s）。
+2. 在 `mcp_tools/signal.py` 调用 `subprocess_run_with_timeout` 时传入 `params`，至少包含 `route_files_bytes/net_file_bytes`，并在 `calculate_adaptive_timeout` 中对上述两类 operation 做基于文件大小的自适应扩展。
+3. 单测：验证 `calculate_adaptive_timeout('tlsCycleAdaptation', {'route_files_bytes': ...})` 会随输入增大而增大，并且 `mcp_tools.signal.tls_cycle_adaptation` 会把 size params 传给 `subprocess_run_with_timeout`。
+
+**影响范围：** 减少 Windows 下的误超时失败，提升 signal_opt 工作流成功率","1. 单测覆盖 timeout 自适应逻辑与 params 透传
+2. `pytest -q` 通过","1. 不引入额外依赖
+2. 不改变工具返回类型/格式",已完成,已完成
 P1-7,RL: 补齐 manage_rl_task(train_custom) 验收单测,"**背景：** `P1-3` 已实现参数同义字段与 scenario 解析，但缺少验收级单测，存在“实现漂移/回归不自知”的风险。
 
 **修复内容：**
