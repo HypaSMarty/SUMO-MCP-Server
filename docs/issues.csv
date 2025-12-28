@@ -480,6 +480,20 @@ P0-11,Simulation: 为 run_simple_simulation 增加自适应超时与超时回收
 3. 执行 `pytest -q` 通过","1. 不引入 stdout 输出
 2. 超时阈值必须通过 `utils.timeout` 统一计算/配置
 3. 不改变成功路径返回格式",已完成,已完成
+P0-12,Tests: signal_opt 集成测试增加超时与 stderr 排水避免卡死,"**背景：** `tests/test_signal_opt.py` 会在 Windows 上执行真实 SUMO 工具链与 MCP server，并通过 stdio 读取 JSON-RPC 响应。当前实现存在典型的子进程管道死锁风险：server/SUMO 将日志写入 stderr，但测试使用 `stderr=subprocess.PIPE` 且从不读取，导致缓冲区写满后 server/SUMO 阻塞，表现为测试卡在 `process.stdout.readline()`。
+
+**第一性原理：**
+- 对于 `Popen(..., stderr=PIPE)` 的子进程，父进程必须消费 stderr，否则子进程可能在写入时阻塞。
+- 对于 stdio JSON-RPC 测试，读取 stdout 必须带超时，否则任何下游卡顿都会把 pytest 卡死。
+
+**修复内容：**
+1. 将 `tests/test_signal_opt.py` 与其他集成测试对齐：`stderr=sys.stderr`（或启用后台线程排空 stderr），并设置 `PYTHONUNBUFFERED=1`、`bufsize=1`。
+2. 复用 `tests/test_workflow.py` 的跨平台读取策略：新增 `_read_json_line(process, timeout_s=...)`，避免 `readline()` 无限等待，并在超时后给出可诊断错误。
+3. 追加回归：在 Windows 上跑 `pytest -k signal_opt` 不再出现“永远不返回”的卡死（失败也应在超时内退出）。
+
+**影响范围：** 防止 Windows CI/本地测试卡死，提升诊断能力","1. `pytest -k signal_opt -q` 在无 SUMO 环境下仍可 skip；在有 SUMO 环境下不会无限挂起（超时会 fail）
+2. `pytest -q` 通过","1. 不将非 JSON 写入 server stdout
+2. 不引入额外依赖",已完成,已完成
 P1-7,RL: 补齐 manage_rl_task(train_custom) 验收单测,"**背景：** `P1-3` 已实现参数同义字段与 scenario 解析，但缺少验收级单测，存在“实现漂移/回归不自知”的风险。
 
 **修复内容：**

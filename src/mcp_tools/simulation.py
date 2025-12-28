@@ -5,6 +5,7 @@ import traci
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_binary
 from utils.timeout import run_with_adaptive_timeout
+from utils.traci import traci_close_best_effort
 
 logger = logging.getLogger(__name__)
 
@@ -64,10 +65,9 @@ def run_simple_simulation(config_path: str, steps: int = 100) -> str:
         return run_with_adaptive_timeout(_run, operation="simulation", params={"steps": steps})
                 
     except Exception as e:
-        try:
-            traci.close()
-        except Exception as close_exc:
-            logger.debug("traci.close failed: %s", close_exc)
+        closed = traci_close_best_effort()
+        if not closed:
+            logger.debug("traci.close timed out during cleanup for %s", config_path)
         return "\n".join(
             [
                 f"Simulation error: {type(e).__name__}: {e}",

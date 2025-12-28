@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import subprocess
+import threading
 from typing import Any, Callable, Optional
 
 
@@ -52,3 +53,30 @@ def ensure_traci_start_stdout_suppressed() -> None:
     setattr(_start, "_mcp_original_start", original_start)
 
     traci.start = _start  # type: ignore[attr-defined]
+
+
+def traci_close_best_effort(timeout_s: float = 5.0) -> bool:
+    """
+    Best-effort close TraCI without risking an indefinite hang.
+
+    Returns:
+        True if `traci.close()` finished within timeout_s, else False.
+    """
+    try:
+        import traci  # type: ignore
+    except Exception:
+        return True
+
+    done = threading.Event()
+
+    def _close() -> None:
+        try:
+            traci.close()
+        except Exception:
+            pass
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=_close, daemon=True, name="sumo-mcp:traci.close")
+    thread.start()
+    return done.wait(timeout_s)

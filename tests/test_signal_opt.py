@@ -3,6 +3,10 @@ import sys
 import subprocess
 import json
 import shutil
+import time
+import selectors
+from typing import Any
+
 import pytest
 
 # This module runs real SUMO simulations/tools. Skip in environments without SUMO.
@@ -11,6 +15,73 @@ pytestmark = pytest.mark.skipif(
     not HAS_SUMO,
     reason="Requires SUMO installed (set SUMO_HOME or add `sumo` to PATH).",
 )
+
+
+def _read_json_line(process: subprocess.Popen[str], timeout_s: float = 300.0) -> dict[str, Any]:
+    if process.stdout is None:
+        raise RuntimeError("process.stdout is None")
+
+    # Windows pipes do not support selectors/select reliably.
+    if sys.platform == "win32":
+        import queue
+        import threading
+
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            line_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+
+            def reader() -> None:
+                line_queue.put(process.stdout.readline())
+
+            thread = threading.Thread(target=reader, daemon=True)
+            thread.start()
+
+            try:
+                line = line_queue.get(timeout=remaining)
+            except queue.Empty:
+                raise TimeoutError("timed out waiting for server JSON-RPC response") from None
+
+            if not line:
+                raise RuntimeError("server stdout closed unexpectedly")
+
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise AssertionError(f"Expected JSON-RPC line, got: {line}") from exc
+
+        raise TimeoutError("timed out waiting for server JSON-RPC response")
+
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    try:
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            events = selector.select(timeout=remaining)
+            if not events:
+                continue
+
+            line = process.stdout.readline()
+            if not line:
+                raise RuntimeError("server stdout closed unexpectedly")
+
+            line = line.strip()
+            if not line:
+                continue
+
+            try:
+                return json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise AssertionError(f"Expected JSON-RPC line, got: {line}") from exc
+
+        raise TimeoutError("timed out waiting for server JSON-RPC response")
+    finally:
+        selector.close()
 
 
 def test_signal_opt_workflow():
@@ -41,68 +112,93 @@ def test_signal_opt_workflow():
     from mcp_tools.network import netgenerate
     from mcp_tools.route import random_trips, duarouter
     
-    netgenerate(net_file, grid=True, grid_number=3, options=["--tls.guess"])
-    random_trips(net_file, trips_file, end_time=50)
-    duarouter(net_file, trips_file, route_file)
+    res_net = netgenerate(net_file, grid=True, grid_number=3, options=["--tls.guess"])
+    assert "error" not in res_net.lower() and "failed" not in res_net.lower()
+    res_trips = random_trips(net_file, trips_file, end_time=50)
+    assert "error" not in res_trips.lower() and "failed" not in res_trips.lower()
+    res_routes = duarouter(net_file, trips_file, route_file)
+    assert "error" not in res_routes.lower() and "failed" not in res_routes.lower()
     
     # Now run the workflow via server script (integration test)
     server_path = os.path.join(base_dir, "..", "src", "server.py")
     python_exe = sys.executable # Use current python
+
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
     
     process = subprocess.Popen(
         [python_exe, server_path],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=sys.stderr,
         text=True,
-        bufsize=0
+        env=env,
+        bufsize=1,
     )
-    
-    # Initialize
-    process.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + "\n")
-    process.stdin.flush()
-    process.stdout.readline()
-    
-    process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
-    process.stdin.flush()
-    
-    # Call Workflow
-    req = {
-        "jsonrpc": "2.0",
-        "id": 2,
-        "method": "tools/call",
-        "params": {
-            "name": "run_workflow",
-            "arguments": {
-                "workflow_name": "signal_opt",
-                "params": {
-                    "net_file": net_file,
-                    "route_file": route_file,
-                    "output_dir": output_dir,
-                    "steps": 50,
-                    "use_coordinator": False 
+
+    try:
+        assert process.stdin is not None
+
+        # Initialize
+        process.stdin.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "pytest", "version": "0"},
+                    },
                 }
-            }
+            )
+            + "\n"
+        )
+        process.stdin.flush()
+        init_resp = _read_json_line(process, timeout_s=20.0)
+        assert init_resp["id"] == 1
+
+        process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
+        process.stdin.flush()
+
+        # Call Workflow
+        req = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {
+                "name": "run_workflow",
+                "arguments": {
+                    "workflow_name": "signal_opt",
+                    "params": {
+                        "net_file": net_file,
+                        "route_file": route_file,
+                        "output_dir": output_dir,
+                        "steps": 50,
+                        "use_coordinator": False,
+                    },
+                },
+            },
         }
-    }
-    process.stdin.write(json.dumps(req) + "\n")
-    process.stdin.flush()
-    
-    line = process.stdout.readline()
-    response = json.loads(line)
-    
-    if "error" in response:
-        print("Error:", response["error"])
-        assert False
-        
-    content = response["result"]["content"][0]["text"]
-    print("Workflow Output:\n", content)
-    
-    assert "Signal Optimization Workflow Completed" in content
-    assert "Baseline Results" in content
-    assert "Optimized Results" in content
-    
-    process.terminate()
+        process.stdin.write(json.dumps(req) + "\n")
+        process.stdin.flush()
+
+        response = _read_json_line(process, timeout_s=900.0)  # 15 minutes for signal_opt workflow
+
+        if "error" in response:
+            raise AssertionError(f"Server returned error: {response['error']}")
+
+        content = response["result"]["content"][0]["text"]
+        assert "Signal Optimization Workflow Completed" in content
+        assert "Baseline Results" in content
+        assert "Optimized Results" in content
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
 
 if __name__ == "__main__":
     test_signal_opt_workflow()

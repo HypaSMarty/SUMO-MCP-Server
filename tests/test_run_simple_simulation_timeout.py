@@ -44,5 +44,5 @@ def test_run_simple_simulation_times_out_and_closes_traci(tmp_path) -> None:
 
     assert elapsed < 0.3
     assert "TimeoutError" in result
-    # Best-effort cleanup is attempted on timeout in the calling thread.
-    assert "MainThread" in close_threads
+    # Best-effort cleanup is attempted without risking an indefinite hang.
+    assert any("traci.close" in name for name in close_threads)
