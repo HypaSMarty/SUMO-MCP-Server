@@ -1,7 +1,16 @@
 import os
+from pathlib import PurePosixPath, PureWindowsPath
 from unittest.mock import patch
 
 from utils.sumo import find_sumo_home
+
+
+def _paths_equivalent(actual: str | None, expected: str) -> bool:
+    """Compare paths ignoring OS-specific separators."""
+    if actual is None:
+        return False
+    # Normalize both paths to compare their components
+    return PurePosixPath(actual.replace("\\", "/")) == PurePosixPath(expected.replace("\\", "/"))
 
 
 def test_find_sumo_home_windows_common_paths() -> None:
@@ -9,7 +18,8 @@ def test_find_sumo_home_windows_common_paths() -> None:
         with patch("sys.platform", "win32"):
             with patch("utils.sumo.find_sumo_binary", return_value="sumo"):
                 with patch("pathlib.Path.exists", return_value=True):
-                    assert find_sumo_home() == "C:/Program Files/Eclipse/sumo"
+                    result = find_sumo_home()
+                    assert _paths_equivalent(result, "C:/Program Files/Eclipse/sumo")
 
 
 def test_find_sumo_home_macos_homebrew_cellar() -> None:
@@ -19,5 +29,6 @@ def test_find_sumo_home_macos_homebrew_cellar() -> None:
             with patch("utils.sumo.find_sumo_binary", return_value="sumo"):
                 with patch("utils.sumo.glob.glob", return_value=[homebrew_sumo_home]):
                     with patch("pathlib.Path.exists", return_value=True):
-                        assert find_sumo_home() == homebrew_sumo_home
+                        result = find_sumo_home()
+                        assert _paths_equivalent(result, homebrew_sumo_home)
 

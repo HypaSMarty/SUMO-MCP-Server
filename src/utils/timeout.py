@@ -7,9 +7,11 @@
 3. 心跳+指数退避 - 用于长时间运行的操作（如 RL 训练）
 """
 
+import os
 import logging
 import inspect
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -37,7 +39,7 @@ TIMEOUT_CONFIGS = {
     "osmGet": TimeoutConfig(base_timeout=120, max_timeout=300),
 
     # Layer 2: 参数自适应（基础值，实际会根据参数调整）
-    "randomTrips": TimeoutConfig(base_timeout=60, max_timeout=600),
+    "randomTrips": TimeoutConfig(base_timeout=300, max_timeout=900),
     "duarouter": TimeoutConfig(base_timeout=120, max_timeout=1800),
     "simulation": TimeoutConfig(base_timeout=60, max_timeout=1800),
     "tlsCycleAdaptation": TimeoutConfig(base_timeout=300, max_timeout=1800),
@@ -329,6 +331,23 @@ def subprocess_run_with_timeout(
     kwargs.setdefault("capture_output", True)
     kwargs.setdefault("text", True)
 
+    # Ensure tool subprocesses don't inherit "server stdio" behaviors that are only
+    # needed for the MCP transport (e.g., PYTHONUNBUFFERED for JSON-RPC flushing).
+    env = kwargs.get("env")
+    if env is None:
+        env = os.environ.copy()
+    else:
+        env = dict(env)
+    env.pop("PYTHONUNBUFFERED", None)
+    kwargs["env"] = env
+
+    # Windows: prevent leaking inheritable handles into nested subprocesses and
+    # avoid spawning a console window (can be surprisingly slow under piped stdio).
+    if sys.platform == "win32":
+        kwargs.setdefault("close_fds", True)
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kwargs.setdefault("creationflags", subprocess.CREATE_NO_WINDOW)
+
     try:
         return subprocess.run(cmd, timeout=timeout, **kwargs)
     except subprocess.TimeoutExpired as e:
@@ -337,7 +356,7 @@ def subprocess_run_with_timeout(
             timeout, " ".join(cmd[:3]) + "..."
         )
         raise TimeoutError(
-            f"Command timed out after {timeout:.0f}s. "
+            f"Operation '{operation}' timed out after {timeout:.0f}s. "
             f"This may indicate a very large input or a hanging process. "
             f"Consider breaking down the operation or increasing timeout limits."
         ) from e

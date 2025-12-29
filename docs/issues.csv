@@ -617,4 +617,27 @@ P3-2b,路网生成(Spider): 补齐验收单测（spider 不含 grid）（验收�
 2. 新增单测：当 `grid=true`（默认）时仍包含 `--grid` 且不包含 `--spider`。
 
 **影响范围：** Spider/Grid 互斥逻辑的可回归性","1. `pytest -q` 通过
-2. 单测不依赖真实 SUMO（二进制与 subprocess 全 mock）","1. 断言必须覆盖“互斥”而非仅某个 flag 存在",已完成,已完成
+2. 单测不依赖真实 SUMO（二进制与 subprocess 全 mock）","1. 断言必须覆盖互斥而非仅某个 flag 存在",已完成,已完成
+P0-17,MCP Server: TLS 工具通过服务器子进程调用时异常慢/超时,"**背景：** 在 Windows 上通过 MCP 服务器（作为 subprocess）调用 `signal_opt_workflow` 时，`tlsCycleAdaptation.py` / `tlsCoordinator.py` 会超时（300s+），但直接调用同样的函数只需 <1s。
+
+**现象（Windows 复现）：**
+- 直接调用 `tls_cycle_adaptation(net, route, opt)` 很快结束
+- 通过 pytest 启动 MCP server subprocess，JSON-RPC 调用 `run_workflow(signal_opt)` 时 TLS 工具超时 300s+（触发 P0-15 回退）
+
+**根因定位（高置信）：**
+- MCP server 在 Windows 上以 `stdin=PIPE/stdout=PIPE` 方式运行（JSON-RPC over stdio）。
+- TLS 工具子进程默认继承 server 的 `stdin` 与可继承句柄，导致在该环境下出现异常慢/卡住的行为。
+
+**修复：**
+- 在 `src/utils/timeout.py::subprocess_run_with_timeout` 中为所有工具子进程强制：
+  - `stdin=subprocess.DEVNULL`（避免误读 JSON-RPC stdin）
+  - Windows: `close_fds=True` + `CREATE_NO_WINDOW`（减少句柄泄漏/控制台开销）
+  - 清理子进程环境变量中的 `PYTHONUNBUFFERED`（仅 server 需要）
+
+**验证：**
+- `pytest tests/test_signal_opt.py -q` 通过（~5s，且不再依赖 `Optimization was skipped` 回退）
+- `pytest -q` 通过","1. 通过 MCP server JSON-RPC 调用 `run_workflow(signal_opt)` 时，TLS 工具在合理时间（<30s）内完成（Windows）
+2. `pytest tests/test_signal_opt.py -q` 通过，且结果中不出现 `Optimization was skipped`
+3. `pytest -q` 通过","1. 不引入 stdout 输出污染 MCP stdio
+2. 修复不应破坏现有回退机制（P0-15）
+3. 保持跨平台兼容性",已完成,已完成

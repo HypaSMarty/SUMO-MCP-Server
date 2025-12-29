@@ -189,6 +189,9 @@ def test_signal_opt_workflow(tmp_path: Path) -> None:
         assert "Signal Optimization Workflow Completed" in content
         assert "Baseline Results" in content
         assert "Optimized Results" in content
+        # If optimization was skipped (P0-15 fallback), this test should fail to
+        # avoid silently passing without actually validating TLS optimization.
+        assert "Optimization was skipped" not in content
     finally:
         process.terminate()
         try:

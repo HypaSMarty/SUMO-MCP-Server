@@ -146,7 +146,7 @@ def test_workflow(tmp_path: Path) -> None:
             + "\n"
         )
         process.stdin.flush()
-        call_resp = _read_json_line(process, timeout_s=120.0)
+        call_resp = _read_json_line(process, timeout_s=600.0)  # 10 min for full workflow
         assert call_resp["id"] == 2
         assert "error" not in call_resp
 

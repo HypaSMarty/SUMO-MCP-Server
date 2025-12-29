@@ -203,3 +203,10 @@ sumo-rl-*.zip
 
 # Private test assets (not part of OSS release)
 路网/
+
+# Local debug/test scripts (P0-17 investigation)
+scripts/
+test_output/
+
+# Codex auto-prompt (local only)
+docs/codex-auto-prompt/
