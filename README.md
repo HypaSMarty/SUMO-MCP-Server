@@ -268,8 +268,8 @@ python src/server.py
 
 *   **工作流任务**:
 
-    > "生成一个 3x3 的网格路网，模拟 3600 秒的交通流，并告诉我平均车速。"
-    > *(AI 将调用 `run_workflow("sim_gen_eval", {"grid_number": 3, "sim_seconds": 1000})`)*
+    > "生成一个 3x3 的网格路网，模拟 100 秒的交通流，并告诉我平均车速。"
+    > *(AI 将调用 `run_workflow("sim_gen_eval", {"grid_number": 3, "sim_seconds": 100})`)*
 
 *   **在线交互任务**:
     > "启动这个配置文件的仿真，每运行一步就告诉我 ID 为 'v_0' 的车辆速度，如果速度低于 5m/s 就提醒我。"
@@ -316,14 +316,19 @@ sumo-mcp/
 │   ├── server.py           # MCP 服务器入口 (FastMCP 实现，聚合接口)
 │   ├── utils/              # 通用工具
 │   │   ├── connection.py   # TraCI 连接管理器
-│   │   └── ...
+│   │   ├── output.py       # 输出处理工具
+│   │   ├── sumo.py         # SUMO 配置工具
+│   │   ├── timeout.py      # 超时管理工具
+│   │   └── traci.py        # TraCI 封装工具
 │   ├── mcp_tools/          # 核心工具模块
+│   │   ├── analysis.py     # 分析工具
 │   │   ├── network.py      # 网络工具
 │   │   ├── route.py        # 路径工具
 │   │   ├── signal.py       # 信号工具
+│   │   ├── simulation.py   # 仿真控制工具
 │   │   ├── vehicle.py      # 车辆工具
-│   │   ├── rl.py           # 强化学习工具
-│   │   └── analysis.py     # 分析工具
+│   │   └── rl.py           # 强化学习工具
+│   ├── resources/          # 资源文件
 │   └── workflows/          # 自动化工作流
 │       ├── sim_gen.py      # 仿真生成工作流
 │       ├── signal_opt.py   # 信号优化工作流
@@ -336,6 +341,12 @@ sumo-mcp/
 ## 📄 许可证
 
 MIT License
+
+## 📣 媒体支持
+
+感谢以下媒体平台对项目的支持：
+
+- BigTrans 公众号 - [重磅开源！SUMO-MCP让大模型助力交通仿真](https://mp.weixin.qq.com/s/fJ_W0zEQlgA-1bAfmjki-A)
 
 ## 贡献者 ✨
 
@@ -357,6 +368,12 @@ MIT License
       <a href="https://github.com/Hiners">
         <img src="https://github.com/Hiners.png?size=100" width="100px;" alt=""/><br />
         <sub><b>Hiners</b></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/Zpzp1997">
+        <img src="https://github.com/Zpzp1997.png?size=100" width="100px;" alt=""/><br />
+        <sub><b>Zpzp1997</b></sub>
       </a>
     </td>
   </tr>
