@@ -5,6 +5,8 @@ import sys
 from typing import Optional, List
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+from utils.output import truncate_text
+from utils.timeout import subprocess_run_with_timeout
 
 def random_trips(net_file: str, output_file: str, end_time: int = 3600, period: float = 1.0, options: Optional[List[str]] = None) -> str:
     """
@@ -28,10 +30,15 @@ def random_trips(net_file: str, output_file: str, end_time: int = 3600, period: 
         cmd.extend(options)
         
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"randomTrips successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(
+            cmd,
+            operation="randomTrips",
+            params={"end_time": end_time},
+            check=True,
+        )
+        return f"randomTrips successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"randomTrips failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"randomTrips failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"randomTrips execution error: {str(e)}"
 
@@ -41,7 +48,7 @@ def duarouter(net_file: str, route_files: str, output_file: str, options: Option
     """
     try:
         binary = sumolib.checkBinary('duarouter')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding duarouter: {e}"
         
     cmd = [binary, "-n", net_file, "--route-files", route_files, "-o", output_file, "--ignore-errors"]
@@ -50,10 +57,10 @@ def duarouter(net_file: str, route_files: str, output_file: str, options: Option
         cmd.extend(options)
         
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"duarouter successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(cmd, operation="duarouter", check=True)
+        return f"duarouter successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"duarouter failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"duarouter failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"duarouter execution error: {str(e)}"
 
@@ -67,7 +74,7 @@ def od2trips(od_file: str, output_file: str, options: Optional[List[str]] = None
     """
     try:
         binary = sumolib.checkBinary('od2trips')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding od2trips: {e}"
         
     cmd = [binary, "--od-matrix-files", od_file, "-o", output_file]
@@ -76,9 +83,9 @@ def od2trips(od_file: str, output_file: str, options: Optional[List[str]] = None
         cmd.extend(options)
         
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"od2trips successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(cmd, operation="od2trips", check=True)
+        return f"od2trips successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"od2trips failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"od2trips failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"od2trips execution error: {str(e)}"

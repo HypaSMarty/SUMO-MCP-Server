@@ -1,7 +1,13 @@
 import os
+import logging
+import subprocess
 import traci
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_binary
+from utils.timeout import run_with_adaptive_timeout
+from utils.traci import traci_close_best_effort
+
+logger = logging.getLogger(__name__)
 
 def run_simple_simulation(config_path: str, steps: int = 100) -> str:
     """
@@ -33,26 +39,41 @@ def run_simple_simulation(config_path: str, steps: int = 100) -> str:
     cmd = [sumo_binary, "-c", config_path, "--no-step-log", "true", "--random"]
     
     try:
-        traci.start(cmd)
-        
-        vehicle_counts = []
-        for step in range(steps):
-            traci.simulationStep()
-            vehicle_counts.append(traci.vehicle.getIDCount())
-        
-        traci.close()
-        
-        avg_vehicles = sum(vehicle_counts) / len(vehicle_counts) if vehicle_counts else 0
-        max_vehicles = max(vehicle_counts) if vehicle_counts else 0
-        
-        return (f"Simulation finished successfully.\n"
+        def _run() -> str:
+            # IMPORTANT: MCP uses stdout for JSON-RPC over stdio.
+            # SUMO can write progress/log output to stdout which would corrupt the protocol stream,
+            # causing clients to hang or show "undefined" responses.
+            traci.start(cmd, stdout=subprocess.DEVNULL)
+
+            vehicle_counts = []
+            for _ in range(steps):
+                traci.simulationStep()
+                vehicle_counts.append(traci.vehicle.getIDCount())
+
+            traci.close()
+
+            avg_vehicles = sum(vehicle_counts) / len(vehicle_counts) if vehicle_counts else 0
+            max_vehicles = max(vehicle_counts) if vehicle_counts else 0
+
+            return (
+                "Simulation finished successfully.\n"
                 f"Steps run: {steps}\n"
                 f"Average vehicles: {avg_vehicles:.2f}\n"
-                f"Max vehicles: {max_vehicles}")
+                f"Max vehicles: {max_vehicles}"
+            )
+
+        return run_with_adaptive_timeout(_run, operation="simulation", params={"steps": steps})
                 
     except Exception as e:
-        try:
-            traci.close()
-        except:
-            pass
-        return f"Simulation error: {str(e)}"
+        closed = traci_close_best_effort()
+        if not closed:
+            logger.debug("traci.close timed out during cleanup for %s", config_path)
+        return "\n".join(
+            [
+                f"Simulation error: {type(e).__name__}: {e}",
+                f"- config_path: {config_path}",
+                f"- steps: {steps}",
+                f"- sumo_binary: {sumo_binary}",
+                f"- SUMO_HOME: {os.environ.get('SUMO_HOME', 'Not Set')}",
+            ]
+        )

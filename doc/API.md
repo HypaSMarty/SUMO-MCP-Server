@@ -70,7 +70,7 @@
     *   `net_file` (string): 基础路网文件路径。
     *   `output_file` (string): 输出文件路径。
     *   `params` (object, optional): 具体操作参数：
-        *   `generate_random` / `random_trips`: `{ "end_time": int, "period": float }`
+        *   `generate_random` / `random_trips`: `{ "end_time": int, "end": int, "period": float }`（`end` 为兼容别名）
         *   `convert_od` / `od_matrix`: `{ "od_file": string }`
         *   `compute_routes` / `routing`: `{ "route_files": string }` (输入 trips 文件路径)
         *   `options`: `list[string]`，追加到底层命令的额外参数（见“通用约定”）
@@ -133,10 +133,41 @@
         *   `sim_gen_eval` (或 `sim_gen_workflow` / `sim_gen`): 自动生成路网并评估。
         *   `signal_opt` (或 `signal_opt_workflow`): 信号灯优化全流程对比。
         *   `rl_train`: 强化学习训练流程。
-    *   `params` (object): 工作流参数字典。
-        *   `sim_gen_eval`: `{ "output_dir", "grid_number", "steps" }`
-        *   `signal_opt`: `{ "net_file", "route_file", "output_dir", "steps", "use_coordinator" }`
-        *   `rl_train`: `{ "scenario_name", "output_dir", "episodes", "steps" }`
+    *   `params` (object): 工作流参数字典（支持别名，优先级按列出顺序）。
+
+### sim_gen_eval 参数
+
+| 参数 | 类型 | 默认值 | 别名 | 说明 |
+|------|------|--------|------|------|
+| `grid_number` | int | 3 | `grid_size`, `size` | 网格大小 NxN |
+| `sim_seconds` | int | 100 | `steps`, `duration`, `end_time` | 仿真时长（秒） |
+| `output_dir` | string | "output" | - | 输出目录 |
+
+**调用示例**:
+```json
+run_workflow("sim_gen_eval", {"grid_number": 3, "sim_seconds": 1000})
+// 等价于：
+run_workflow("sim_gen_eval", {"size": 3, "steps": 1000})
+```
+
+### signal_opt 参数
+
+| 参数 | 类型 | 默认值 | 别名 | 说明 |
+|------|------|--------|------|------|
+| `net_file` | string | **必填** | - | .net.xml 路网文件路径 |
+| `route_file` | string | **必填** | - | .rou.xml 路由文件路径 |
+| `sim_seconds` | int | 3600 | `steps`, `duration` | 仿真时长（秒） |
+| `use_coordinator` | bool | false | - | 使用 tlsCoordinator 替代 tlsCycleAdaptation |
+| `output_dir` | string | "output" | - | 输出目录 |
+
+### rl_train 参数
+
+| 参数 | 类型 | 默认值 | 别名 | 说明 |
+|------|------|--------|------|------|
+| `scenario_name` | string | - | `scenario` | 内置场景名（用 `manage_rl_task("list_scenarios")` 查看） |
+| `episodes` | int | 5 | `num_episodes` | 训练回合数 |
+| `steps` | int | 1000 | `steps_per_episode` | 每回合步数 |
+| `output_dir` | string | "output" | - | 输出目录 |
 
 ## 7. 强化学习任务 (manage_rl_task)
 

@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from utils.traci import ensure_traci_start_stdout_suppressed
 from mcp_tools.simulation import run_simple_simulation
 from mcp_tools.network import netconvert, netgenerate, osm_get
 from mcp_tools.route import random_trips, duarouter, od2trips
@@ -24,6 +25,9 @@ from workflows.rl_train import rl_train_workflow
 # Configure logging to stderr to not interfere with MCP stdio transport
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Ensure TraCI never writes to stdout by default (MCP stdio safety).
+ensure_traci_start_stdout_suppressed()
 
 # Initialize MCP Server (official SDK)
 server = FastMCP("SUMO-MCP-Server")
@@ -49,8 +53,76 @@ def manage_network(action: str, output_file: str, params: Optional[Dict[str, Any
             # Spider network takes precedence over grid settings.
             grid = False
             options_list = list(options or [])
+
+            def _strip_flag(flag: str, has_value: bool = False) -> None:
+                while flag in options_list:
+                    idx = options_list.index(flag)
+                    options_list.pop(idx)
+                    if has_value and idx < len(options_list):
+                        options_list.pop(idx)
+
+            def _set_option(flag: str, value: str) -> None:
+                if flag in options_list:
+                    idx = options_list.index(flag)
+                    if idx + 1 < len(options_list):
+                        options_list[idx + 1] = value
+                    else:
+                        options_list.append(value)
+                else:
+                    options_list.extend([flag, value])
+
+            # Enforce Spider/Grid mutual exclusion even when the user provided `options`.
+            _strip_flag("--grid")
+            _strip_flag("--grid.number", has_value=True)
+
             if "--spider" not in options_list:
                 options_list.insert(0, "--spider")
+
+            arms_raw = params.get("arms", params.get("arm_number"))
+            if arms_raw is not None:
+                try:
+                    arms = int(arms_raw)
+                except (TypeError, ValueError):
+                    return f"Error: arms must be a positive integer, got {arms_raw!r}"
+                if arms <= 0:
+                    return "Error: arms must be > 0"
+                _set_option("--spider.arm-number", str(arms))
+
+            circles_raw = params.get("circles", params.get("circle_number"))
+            if circles_raw is not None:
+                try:
+                    circles = int(circles_raw)
+                except (TypeError, ValueError):
+                    return f"Error: circles must be a positive integer, got {circles_raw!r}"
+                if circles <= 0:
+                    return "Error: circles must be > 0"
+                _set_option("--spider.circle-number", str(circles))
+
+            space_radius_raw = params.get("ring_radius", params.get("space_radius"))
+            if space_radius_raw is not None:
+                try:
+                    space_radius = float(space_radius_raw)
+                except (TypeError, ValueError):
+                    return f"Error: ring_radius must be a number, got {space_radius_raw!r}"
+                if space_radius <= 0:
+                    return "Error: ring_radius must be > 0"
+                _set_option("--spider.space-radius", str(space_radius))
+
+            attach_length_raw = params.get("radial_distance", params.get("attach_length"))
+            if attach_length_raw is not None:
+                try:
+                    attach_length = float(attach_length_raw)
+                except (TypeError, ValueError):
+                    return f"Error: radial_distance must be a number, got {attach_length_raw!r}"
+                if attach_length < 0:
+                    return "Error: radial_distance must be >= 0"
+                _set_option("--spider.attach-length", str(attach_length))
+
+            omit_center_raw = params.get("omit_center")
+            if omit_center_raw:
+                if "--spider.omit-center" not in options_list:
+                    options_list.append("--spider.omit-center")
+
             options = options_list
 
         return netgenerate(output_file, grid, grid_number, options)
@@ -82,8 +154,17 @@ def manage_demand(action: str, net_file: str, output_file: str, params: Optional
     options = params.get("options")
     
     if action == "generate_random" or action == "random_trips":
-        end_time = params.get("end_time", 3600)
-        period = params.get("period", 1.0)
+        # Backward/compat aliases: some clients use `end` instead of `end_time`.
+        end_time_raw = params.get("end_time", params.get("end", 3600))
+        period_raw = params.get("period", 1.0)
+        try:
+            end_time = int(end_time_raw)
+        except (TypeError, ValueError):
+            return f"Error: end_time must be an integer, got {end_time_raw!r}"
+        try:
+            period = float(period_raw)
+        except (TypeError, ValueError):
+            return f"Error: period must be a number, got {period_raw!r}"
         return random_trips(net_file, output_file, end_time, period, options)
         
     elif action == "convert_od" or action == "od_matrix":
@@ -110,25 +191,42 @@ def control_simulation(action: str, params: Optional[Dict[str, Any]] = None) -> 
     params = params or {}
     
     try:
+        timeout_s_raw = params.get("timeout_s", params.get("timeout"))
+        timeout_s: Optional[float] = None
+        if timeout_s_raw is not None:
+            try:
+                timeout_s = float(timeout_s_raw)
+            except (TypeError, ValueError):
+                return f"Error: timeout_s must be a number, got {timeout_s_raw!r}"
+
         if action == "connect":
             config_file = params.get("config_file")
             gui = params.get("gui", False)
             port = params.get("port", 8813)
             host = params.get("host", "localhost")
-            connection_manager.connect(config_file, gui, port, host)
+            if timeout_s is None:
+                connection_manager.connect(config_file, gui, port, host)
+            else:
+                connection_manager.connect(config_file, gui, port, host, timeout_s=timeout_s)
             return "Successfully connected to SUMO."
             
         elif action == "step":
             step = params.get("step", 0)
-            connection_manager.simulation_step(step)
+            if timeout_s is None:
+                connection_manager.simulation_step(step)
+            else:
+                connection_manager.simulation_step(step, timeout_s=timeout_s)
             return "Simulation advanced."
             
         elif action == "disconnect":
-            connection_manager.disconnect()
+            if timeout_s is None:
+                connection_manager.disconnect()
+            else:
+                connection_manager.disconnect(timeout_s=timeout_s)
             return "Successfully disconnected from SUMO."
             
     except Exception as e:
-        return f"Error in control_simulation ({action}): {e}"
+        return f"Error in control_simulation ({action}): {type(e).__name__}: {e}"
         
     return f"Unknown action: {action}"
 
@@ -165,7 +263,7 @@ def query_simulation_state(target: str, params: Optional[Dict[str, Any]] = None)
             return f"Simulation Info: {info}"
             
     except Exception as e:
-        return f"Error querying state: {e}"
+        return f"Error querying state: {type(e).__name__}: {e}"
         
     return f"Unknown target: {target}"
 
@@ -188,37 +286,71 @@ def optimize_traffic_signals(method: str, net_file: str, route_file: str, output
     return f"Unknown method: {method}"
 
 # --- 6. Workflows ---
-@server.tool(description="Run high-level workflows.")
+@server.tool(
+    description="""Run high-level SUMO workflows. Available workflows:
+
+**sim_gen_eval** - Generate grid network, simulate traffic, analyze results.
+  params:
+  - grid_number (int): Grid size NxN. Default=3. Aliases: grid_size, size
+  - sim_seconds (int): Simulation duration in seconds. Default=100. Aliases: steps, duration, end_time
+  - output_dir (str): Output directory. Default="output"
+  Example: run_workflow("sim_gen_eval", {"grid_number": 3, "sim_seconds": 1000})
+
+**signal_opt** - Optimize traffic signals for existing network.
+  params:
+  - net_file (str): Path to .net.xml file. REQUIRED
+  - route_file (str): Path to .rou.xml file. REQUIRED
+  - sim_seconds (int): Simulation duration. Default=3600. Aliases: steps, duration
+  - use_coordinator (bool): Use tlsCoordinator instead of tlsCycleAdaptation. Default=false
+  - output_dir (str): Output directory. Default="output"
+
+**rl_train** - Train RL agent for traffic signal control.
+  params:
+  - scenario_name (str): Built-in scenario name (use manage_rl_task("list_scenarios") to see options). Aliases: scenario
+  - episodes (int): Number of training episodes. Default=5. Aliases: num_episodes
+  - steps (int): Steps per episode. Default=1000. Aliases: steps_per_episode
+  - output_dir (str): Output directory. Default="output"
+"""
+)
 def run_workflow(workflow_name: str, params: Dict[str, Any]) -> str:
-    """
-    workflows:
-    - sim_gen_eval: params={'output_dir', 'grid_number', 'steps'}
-    - signal_opt: params={'net_file', 'route_file', 'output_dir', 'steps', 'use_coordinator'}
-    - rl_train: params={'scenario_name', 'output_dir', 'episodes', 'steps'}
-    """
-    if workflow_name == "sim_gen_eval" or workflow_name == "sim_gen_workflow" or workflow_name == "sim_gen":
-        return sim_gen_workflow(
-            params.get("output_dir", "output"), 
-            params.get("grid_number", 3), 
-            params.get("steps", 100)
-        )
-    elif workflow_name == "signal_opt" or workflow_name == "signal_opt_workflow":
-        return signal_opt_workflow(
-            params.get("net_file", ""),
-            params.get("route_file", ""),
-            params.get("output_dir", "output"),
-            params.get("steps", 3600),
-            params.get("use_coordinator", False)
-        )
+    """Execute a high-level workflow."""
+
+    # Helper to get param with aliases
+    def get_param(keys: list, default=None):
+        for k in keys:
+            if k in params:
+                return params[k]
+        return default
+
+    if workflow_name in ("sim_gen_eval", "sim_gen_workflow", "sim_gen"):
+        grid_number = get_param(["grid_number", "grid_size", "size"], 3)
+        sim_seconds = get_param(["sim_seconds", "steps", "duration", "end_time"], 100)
+        output_dir = get_param(["output_dir"], "output")
+
+        return sim_gen_workflow(output_dir, int(grid_number), int(sim_seconds))
+
+    elif workflow_name in ("signal_opt", "signal_opt_workflow"):
+        net_file = get_param(["net_file"], "")
+        route_file = get_param(["route_file"], "")
+
+        if not net_file or not route_file:
+            return "Error: signal_opt requires net_file and route_file parameters."
+
+        sim_seconds = get_param(["sim_seconds", "steps", "duration"], 3600)
+        use_coordinator = get_param(["use_coordinator"], False)
+        output_dir = get_param(["output_dir"], "output")
+
+        return signal_opt_workflow(net_file, route_file, output_dir, int(sim_seconds), bool(use_coordinator))
+
     elif workflow_name == "rl_train":
-        return rl_train_workflow(
-            params.get("scenario_name", ""),
-            params.get("output_dir", "output"),
-            params.get("episodes", 5),
-            params.get("steps", 1000)
-        )
-        
-    return f"Unknown workflow: {workflow_name}"
+        scenario_name = get_param(["scenario_name", "scenario"], "")
+        episodes = get_param(["episodes", "num_episodes"], 5)
+        steps = get_param(["steps", "steps_per_episode"], 1000)
+        output_dir = get_param(["output_dir"], "output")
+
+        return rl_train_workflow(scenario_name, output_dir, int(episodes), int(steps))
+
+    return f"Unknown workflow: {workflow_name}. Available: sim_gen_eval, signal_opt, rl_train"
 
 # --- 7. RL Task Management ---
 @server.tool(description="Manage RL tasks (list scenarios, custom training).")
@@ -295,7 +427,13 @@ def get_sumo_info() -> str:
                 "Please ensure SUMO is installed and either `sumo` is available in PATH or `SUMO_HOME` is set."
             )
 
-        result = subprocess.run([sumo_binary, "--version"], capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            [sumo_binary, "--version"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
         version_output = (result.stdout.splitlines() or ["Unknown"])[0]
 
         sumo_home = find_sumo_home()
@@ -320,4 +458,20 @@ def run_analysis(fcd_file: str) -> str:
     return analyze_fcd(fcd_file)
 
 if __name__ == "__main__":
-    server.run(transport="stdio")
+    # NOTE:
+    # MCP stdio transport relies on AnyIO/asyncio to process thread callbacks.
+    # In some environments, a lack of scheduled timers can cause the event loop to
+    # block indefinitely while waiting for stdio worker-thread results. A small
+    # periodic sleep keeps the loop responsive without emitting any stdout output.
+    import anyio
+
+    async def _wakeup_task() -> None:
+        while True:
+            await anyio.sleep(0.1)
+
+    async def _run_stdio_with_wakeup() -> None:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(_wakeup_task)
+            await server.run_stdio_async()
+
+    anyio.run(_run_stdio_with_wakeup)

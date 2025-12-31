@@ -1,8 +1,31 @@
+import os
 import subprocess
 import sys
 from typing import Optional, List
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+from utils.output import truncate_text
+from utils.timeout import subprocess_run_with_timeout
+
+
+def _sum_files_bytes(files_csv: str) -> int:
+    total = 0
+    for path in files_csv.split(","):
+        path = path.strip()
+        if not path:
+            continue
+        try:
+            total += os.path.getsize(path)
+        except OSError:
+            continue
+    return total
+
+
+def _file_size_bytes(path: str) -> int:
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return 0
 
 def tls_cycle_adaptation(net_file: str, route_files: str, output_file: str) -> str:
     """
@@ -22,10 +45,15 @@ def tls_cycle_adaptation(net_file: str, route_files: str, output_file: str) -> s
     cmd = [sys.executable, script, "-n", net_file, "-r", route_files, "-o", output_file]
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"tlsCycleAdaptation successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(
+            cmd,
+            operation="tlsCycleAdaptation",
+            params={"route_files_bytes": _sum_files_bytes(route_files), "net_file_bytes": _file_size_bytes(net_file)},
+            check=True,
+        )
+        return f"tlsCycleAdaptation successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"tlsCycleAdaptation failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"tlsCycleAdaptation failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -55,9 +83,14 @@ def tls_coordinator(net_file: str, route_files: str, output_file: str, options: 
         cmd.extend(options)
         
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"tlsCoordinator successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(
+            cmd,
+            operation="tlsCoordinator",
+            params={"route_files_bytes": _sum_files_bytes(route_files), "net_file_bytes": _file_size_bytes(net_file)},
+            check=True,
+        )
+        return f"tlsCoordinator successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"tlsCoordinator failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"tlsCoordinator failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"tlsCoordinator execution error: {str(e)}"

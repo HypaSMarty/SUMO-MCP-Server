@@ -41,8 +41,11 @@ API 参考见 `doc/API.md`（唯一真相源以 `src/server.py` 的工具注册�
 内置端到端的自动化工作流 (`run_workflow`)，简化复杂科研与工程任务：
 
 *   **Sim Gen & Eval (`sim_gen_eval`)**: 一键执行 "生成路网 -> 生成需求 -> 路径计算 -> 仿真运行 -> 结果分析" 的完整闭环。
+    - 参数：`grid_number`(别名:`grid_size`,`size`), `sim_seconds`(别名:`steps`,`duration`,`end_time`), `output_dir`
 *   **Signal Optimization (`signal_opt`)**: 自动执行 "基线仿真 -> 信号优化 -> 优化仿真 -> 效果对比" 的全流程，并自动处理优化工具输出的 `<additional>` 文件挂载。
+    - 参数：`net_file`(必填), `route_file`(必填), `sim_seconds`(别名:`steps`,`duration`), `use_coordinator`, `output_dir`
 *   **RL Training (`rl_train`)**: 针对内置场景的强化学习训练；自定义路网训练使用 `manage_rl_task/train_custom`（底层基于开源项目 [sumo-rl](https://github.com/LucasAlegre/sumo-rl)；要求路网包含信号灯，且运行建议显式设置 `SUMO_HOME`）。
+    - 参数：`scenario_name`(别名:`scenario`), `episodes`(别名:`num_episodes`), `steps`(别名:`steps_per_episode`), `output_dir`
 
 > 💡 **提示**: 关于各工具的详细参数说明与调用示例，请参考 [API 详细文档](doc/API.md)。
 
@@ -260,15 +263,17 @@ python src/server.py
 在配置了 MCP 的 AI 助手中，您可以尝试以下自然语言指令：
 
 *   **工作流任务**:
+
     > "生成一个 3x3 的网格路网，模拟 3600 秒的交通流，并告诉我平均车速。"
-    > *(AI 将调用 `manage_network` 和 `run_workflow`)*
+    > *(AI 将调用 `run_workflow("sim_gen_eval", {"grid_number": 3, "sim_seconds": 1000})`)*
+
 *   **在线交互任务**:
     > "启动这个配置文件的仿真，每运行一步就告诉我 ID 为 'v_0' 的车辆速度，如果速度低于 5m/s 就提醒我。"
     > *(AI 将调用 `control_simulation` 和 `query_simulation_state`)*
 *   **强化学习任务**:
-    
+
     > "列出所有内置的强化学习场景，然后选择一个简单的路口场景训练 5 个回合。"
-    > *(AI 将调用 `manage_rl_task` 和 `run_workflow`)*
+    > *(AI 将调用 `manage_rl_task("list_scenarios")` 和 `run_workflow("rl_train", {"scenario_name": "...", "episodes": 5})`)*
 - **复杂综合场景示例 (推荐测试)**:
 
   > "使用工具中的sumo-mcp完成下面操作：生成一个4x4的网格路网，要求所有节点均为交叉路口，设置网格间距为100米（默认值）确保所有交叉口都配置交通信号灯，设置车辆总数为200辆，运行进行1000秒的交通仿真，启用车辆轨迹记录功能，提取所有车辆的速度数据计算整个仿真期间所有车辆的平均速度，结果精确到小数点后两位。"
@@ -277,7 +282,7 @@ python src/server.py
   >
   > 1. 调用 `manage_network(action="generate", output_file="grid.net.xml", params={"grid": true, "grid_number": 4})`
   > 2. 调用 `manage_demand(action="random_trips", net_file="grid.net.xml", output_file="trips.xml", params={"end_time": 1000, "period": 5.0})` (计算: 1000s / 200辆 = 每5秒一辆)
-  > 3. 调用 `run_workflow(workflow_name="sim_gen_eval", params={"output_dir": "results", "grid_number": 4, "steps": 1000})` 或手动组合 `control_simulation`
+  > 3. 调用 `run_workflow("sim_gen_eval", {"grid_number": 4, "sim_seconds": 1000, "output_dir": "results"})` 或手动组合 `control_simulation`
   > 4. 调用 `run_analysis(fcd_file="results/fcd.xml")` 获取平均速度统计。
 
 ---
@@ -290,6 +295,9 @@ python src/server.py
 *   **提示找不到 tools 脚本**（例如：`randomTrips.py` / `osmGet.py` / `tls*.py`）：
     1. 确认 `SUMO_HOME` 指向 SUMO 安装目录。
     2. 确认 `<SUMO_HOME>/tools` 目录存在且包含对应脚本。
+*   **MCP 调用卡住 / 响应显示 `undefined`**：
+    1. 该项目通过 stdio 传输 JSON-RPC，任何子进程（SUMO / tools 脚本）向标准输出打印的非 JSON 文本都可能污染通信，导致宿主无法解析响应。
+    2. 升级到最新版本（已将 TraCI 启动的 SUMO stdout 做隔离），或确保相关子进程输出被捕获/重定向。
 *   **MCP 客户端无法继承环境变量**：
     1. 在 MCP 客户端配置中显式传入 `env`（参考 `mcp_config_examples.json`）。
 

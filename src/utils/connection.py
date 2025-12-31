@@ -1,10 +1,44 @@
-import traci
 import logging
-from typing import Optional
+import os
+import subprocess
+import threading
+from typing import Callable, Optional, TypeVar
+
+import traci
 
 from utils.sumo import find_sumo_binary
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_TRACI_TIMEOUT_S = float(os.environ.get("SUMO_MCP_TRACI_TIMEOUT_S", "10"))
+
+T = TypeVar("T")
+
+
+def _run_with_timeout(func: Callable[[], T], timeout_s: float, description: str) -> T:
+    result: dict[str, T] = {}
+    error: dict[str, Exception] = {}
+    done = threading.Event()
+
+    def _worker() -> None:
+        try:
+            result["value"] = func()
+        except Exception as exc:
+            error["error"] = exc
+        finally:
+            done.set()
+
+    thread = threading.Thread(target=_worker, daemon=True, name=f"sumo-mcp:{description}")
+    thread.start()
+
+    if not done.wait(timeout_s):
+        raise TimeoutError(f"TimeoutError: {description} timed out after {timeout_s:.1f}s")
+
+    if "error" in error:
+        raise error["error"]
+
+    return result["value"]
+
 
 class SUMOConnection:
     """
@@ -25,6 +59,7 @@ class SUMOConnection:
         gui: bool = False,
         port: int = 8813,
         host: str = "localhost",
+        timeout_s: float = DEFAULT_TRACI_TIMEOUT_S,
     ) -> None:
         """
         Start SUMO and connect, or connect to an existing instance.
@@ -47,24 +82,37 @@ class SUMOConnection:
                 # Add --no-step-log to prevent stdout pollution which breaks JSON-RPC
                 cmd = [binary, "-c", config_file, "--no-step-log", "true"]
                 logger.info(f"Starting SUMO with command: {cmd}")
-                traci.start(cmd, port=port) # Note: traci.start usually handles port selection or defaults
+                _run_with_timeout(
+                    lambda: traci.start(cmd, port=port, stdout=subprocess.DEVNULL),
+                    timeout_s=timeout_s,
+                    description="traci.start",
+                )
             else:
                 logger.info(f"Connecting to existing SUMO at {host}:{port}")
-                traci.init(host=host, port=port)
+                _run_with_timeout(
+                    lambda: traci.init(host=host, port=port),
+                    timeout_s=timeout_s,
+                    description="traci.init",
+                )
             
             self._connected = True
             logger.info("Successfully connected to SUMO.")
         except Exception as e:
             logger.error(f"Failed to connect to SUMO: {e}")
+            self._connected = False
+            try:
+                _run_with_timeout(traci.close, timeout_s=timeout_s, description="traci.close")
+            except Exception:
+                pass
             raise
 
-    def disconnect(self) -> None:
+    def disconnect(self, timeout_s: float = DEFAULT_TRACI_TIMEOUT_S) -> None:
         """Disconnect from SUMO server."""
         if not self._connected:
             return
         
         try:
-            traci.close()
+            _run_with_timeout(traci.close, timeout_s=timeout_s, description="traci.close")
             logger.info("Disconnected from SUMO.")
         except Exception as e:
             logger.error(f"Error during disconnect: {e}")
@@ -73,12 +121,25 @@ class SUMOConnection:
 
     def is_connected(self) -> bool:
         return self._connected
+
+    def traci_call(self, func: Callable[[], T], description: str, timeout_s: float = DEFAULT_TRACI_TIMEOUT_S) -> T:
+        """Run a TraCI call with a soft timeout and disconnect on timeout."""
+        if not self.is_connected():
+            raise RuntimeError("Not connected to SUMO.")
+
+        try:
+            return _run_with_timeout(func, timeout_s=timeout_s, description=description)
+        except TimeoutError:
+            self._connected = False
+            try:
+                _run_with_timeout(traci.close, timeout_s=timeout_s, description="traci.close")
+            except Exception:
+                pass
+            raise
     
-    def simulation_step(self, step: float = 0) -> None:
+    def simulation_step(self, step: float = 0, timeout_s: float = DEFAULT_TRACI_TIMEOUT_S) -> None:
         """Advance the simulation."""
-        if not self._connected:
-             raise RuntimeError("Not connected to SUMO.")
-        traci.simulationStep(step)
+        self.traci_call(lambda: traci.simulationStep(step), description="traci.simulationStep", timeout_s=timeout_s)
 
 # Global instance
 connection_manager = SUMOConnection()

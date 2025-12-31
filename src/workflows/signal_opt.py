@@ -1,12 +1,15 @@
 import os
 import shutil
 import warnings
+import logging
 from filecmp import cmp
 from typing import List, Optional
 
 from mcp_tools.simulation import run_simple_simulation
 from mcp_tools.signal import tls_cycle_adaptation, tls_coordinator
 from mcp_tools.analysis import analyze_fcd
+
+logger = logging.getLogger(__name__)
 
 
 def _copy_to_dir(src_file: str, dst_dir: str) -> str:
@@ -73,16 +76,46 @@ def signal_opt_workflow(
     analysis_baseline = analyze_fcd(baseline_fcd)
     
     # 2. Optimize
+    def _is_failure(result: str) -> bool:
+        lowered = result.lower()
+        return "failed" in lowered or "error" in lowered
+
+    optimization_notes: list[str] = []
+    optimized_net_input = opt_net_file
+
+    primary_method = "tlsCoordinator" if use_coordinator else "tlsCycleAdaptation"
+    fallback_method = "tlsCycleAdaptation" if use_coordinator else "tlsCoordinator"
+
     if use_coordinator:
-        res_opt = tls_coordinator(local_net_file, local_route_file, opt_net_file)
+        res_opt_primary = tls_coordinator(local_net_file, local_route_file, opt_net_file)
     else:
-        res_opt = tls_cycle_adaptation(local_net_file, local_route_file, opt_net_file)
-        
-    if "failed" in res_opt.lower() or "error" in res_opt.lower():
-        return f"Optimization Failed: {res_opt}"
+        res_opt_primary = tls_cycle_adaptation(local_net_file, local_route_file, opt_net_file)
+
+    res_opt = res_opt_primary
+
+    if _is_failure(res_opt_primary):
+        optimization_notes.append(f"Primary method failed: {primary_method}\n{res_opt_primary}")
+
+        if use_coordinator:
+            res_opt_fallback = tls_cycle_adaptation(local_net_file, local_route_file, opt_net_file)
+        else:
+            res_opt_fallback = tls_coordinator(local_net_file, local_route_file, opt_net_file)
+
+        if not _is_failure(res_opt_fallback):
+            optimization_notes.append(f"Fell back to: {fallback_method}")
+            res_opt = "\n\n".join(optimization_notes + [res_opt_fallback])
+        else:
+            optimization_notes.append(f"Fallback method failed: {fallback_method}\n{res_opt_fallback}")
+            optimization_notes.append(
+                "Optimization was skipped; optimized simulation will reuse the baseline network."
+            )
+            res_opt = "\n\n".join(optimization_notes)
+            optimized_net_input = local_net_file
     
     # Check if optimized file is valid and determines if it is a net or additional
-    is_additional = _is_additional_file(opt_net_file)
+    is_additional = False
+    if optimized_net_input != local_net_file:
+        is_additional = _is_additional_file(opt_net_file)
     
     # 3. Run Optimized
     if is_additional:
@@ -96,8 +129,8 @@ def signal_opt_workflow(
             additional_files=[opt_net_file],
         )
     else:
-        # Use new net file
-        _create_config(opt_cfg, opt_net_file, local_route_file, opt_fcd, steps)
+        # Use new net file (or baseline net if optimization was skipped)
+        _create_config(opt_cfg, optimized_net_input, local_route_file, opt_fcd, steps)
         
     res_optimized = run_simple_simulation(opt_cfg, steps)
     if "error" in res_optimized.lower():
@@ -117,7 +150,8 @@ def _is_additional_file(file_path: str) -> bool:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             head = f.read(1000)
         return '<additional' in head
-    except:
+    except Exception as e:
+        logger.debug("Failed to inspect additional file %s: %s", file_path, e)
         return False
 
 

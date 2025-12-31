@@ -5,6 +5,8 @@ import sys
 from typing import Optional, List
 
 from utils.sumo import build_sumo_diagnostics, find_sumo_tool_script
+from utils.output import truncate_text
+from utils.timeout import subprocess_run_with_timeout
 
 def netconvert(osm_file: str, output_file: str, options: Optional[List[str]] = None) -> str:
     """
@@ -12,7 +14,7 @@ def netconvert(osm_file: str, output_file: str, options: Optional[List[str]] = N
     """
     try:
         binary = sumolib.checkBinary('netconvert')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding netconvert: {e}"
 
     cmd = [binary, "--osm-files", osm_file, "-o", output_file]
@@ -20,10 +22,10 @@ def netconvert(osm_file: str, output_file: str, options: Optional[List[str]] = N
         cmd.extend(options)
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"Netconvert successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(cmd, operation="netconvert", check=True)
+        return f"Netconvert successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"Netconvert failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"Netconvert failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"Netconvert execution error: {str(e)}"
 
@@ -33,7 +35,7 @@ def netgenerate(output_file: str, grid: bool = True, grid_number: int = 3, optio
     """
     try:
         binary = sumolib.checkBinary('netgenerate')
-    except Exception as e:
+    except (SystemExit, Exception) as e:
         return f"Error finding netgenerate: {e}"
 
     cmd = [binary, "-o", output_file]
@@ -44,10 +46,10 @@ def netgenerate(output_file: str, grid: bool = True, grid_number: int = 3, optio
         cmd.extend(options)
     
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"Netgenerate successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(cmd, operation="netgenerate", check=True)
+        return f"Netgenerate successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"Netgenerate failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"Netgenerate failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"Netgenerate execution error: {str(e)}"
 
@@ -84,9 +86,9 @@ def osm_get(bbox: str, output_dir: str, prefix: str = "osm", options: Optional[L
         
     try:
         # Run in output_dir so files are saved there
-        result = subprocess.run(cmd, cwd=output_dir, capture_output=True, text=True, check=True)
-        return f"osmGet successful.\nStdout: {result.stdout}"
+        result = subprocess_run_with_timeout(cmd, operation="osmGet", check=True, cwd=output_dir)
+        return f"osmGet successful.\nStdout: {truncate_text(result.stdout)}"
     except subprocess.CalledProcessError as e:
-        return f"osmGet failed.\nStderr: {e.stderr}\nStdout: {e.stdout}"
+        return f"osmGet failed.\nStderr: {truncate_text(e.stderr)}\nStdout: {truncate_text(e.stdout)}"
     except Exception as e:
         return f"osmGet execution error: {str(e)}"
